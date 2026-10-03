@@ -19,12 +19,20 @@ type WatchContextValue = {
   clearError: () => void
 }
 
+type WatchSyncPayload = { session: WatchSession }
+
 export const WatchContext = createContext<WatchContextValue | null>(null)
 
 function payloadSession(payload: unknown) {
   if (!payload || typeof payload !== 'object') return null
   const next = (payload as { new?: unknown }).new
   return isWatchSession(next) ? next : null
+}
+
+function payloadWatchSync(payload: unknown) {
+  if (!payload || typeof payload !== 'object') return null
+  const session = (payload as WatchSyncPayload).session
+  return isWatchSession(session) ? session : null
 }
 
 export function WatchProvider({ children }: { children: ReactNode }) {
@@ -38,6 +46,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   const mountedRef = useRef(true)
   const sessionRef = useRef<WatchSession | null>(null)
   const mutationQueueRef = useRef<Promise<unknown>>(Promise.resolve())
+  const syncChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   const acceptSession = useCallback((next: WatchSession) => {
     const current = sessionRef.current
@@ -119,6 +128,27 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     return () => { disposed = true; void supabase.removeChannel(channel) }
   }, [acceptSession, authSession?.access_token, couple, pairingState, refresh, user])
 
+  // Postgres Changes remains the durable source of truth. This private
+  // Broadcast channel carries the confirmed session to the other screen as
+  // soon as the RPC returns, avoiding replication delay for play/pause/seek.
+  useEffect(() => {
+    if (!user || !couple || pairingState !== 'paired' || !authSession?.access_token) return
+    supabase.realtime.setAuth(authSession.access_token)
+    const channel = supabase
+      .channel(`couple:${couple.id}:watch-sync`, { config: { private: true, broadcast: { self: false, ack: false } } })
+      .on<WatchSyncPayload>('broadcast', { event: 'watch-session' }, ({ payload }) => {
+        const next = payloadWatchSync(payload)
+        if (next && next.couple_id === couple.id) acceptSession(next)
+      })
+
+    syncChannelRef.current = channel
+    channel.subscribe()
+    return () => {
+      if (syncChannelRef.current === channel) syncChannelRef.current = null
+      void supabase.removeChannel(channel)
+    }
+  }, [acceptSession, authSession?.access_token, couple, pairingState, user])
+
   useEffect(() => {
     if (!user || !couple || pairingState !== 'paired') return
     const refreshOnVisible = () => { if (document.visibilityState === 'visible') void refresh().catch(() => undefined) }
@@ -135,6 +165,8 @@ export function WatchProvider({ children }: { children: ReactNode }) {
         const next = await updateWatchSession(mutation)
         if (next.couple_id !== couple.id) throw new Error('watch_session_couple_mismatch')
         acceptSession(next)
+        const channel = syncChannelRef.current
+        if (channel) void channel.send({ type: 'broadcast', event: 'watch-session', payload: { session: next } }).catch(() => undefined)
       } catch (requestError) {
         if (mountedRef.current) setError(friendlyWatchError(requestError))
         throw requestError

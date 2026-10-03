@@ -147,11 +147,11 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
       if (!player || current.playback_state !== 'playing' || !current.media_id) return
       const expected = boundedTime(player, expectedWatchPosition(current))
       const actual = boundedTime(player, player.getCurrentTime())
-      if (Math.abs(actual - expected) > 1.2) {
-        setSuppression(2_500)
+      if (Math.abs(actual - expected) > .65) {
+        setSuppression(1_800)
         player.seekTo(expected, true)
       }
-    }, 5_000)
+    }, 2_000)
     return () => window.clearInterval(timer)
   }, [ready, setSuppression])
 
