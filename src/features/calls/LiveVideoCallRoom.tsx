@@ -27,7 +27,20 @@ function useCallDuration(answeredAt: string | null) {
   return formatDuration(Math.max(0, Math.floor((now - answered) / 1_000)))
 }
 
+async function waitForMediaAction(operation: () => Promise<unknown>) {
+  let timeout: number | undefined
+  try {
+    await Promise.race([
+      operation(),
+      new Promise((_, reject) => { timeout = window.setTimeout(() => reject(new Error('media_action_timeout')), 8_000) }),
+    ])
+  } finally {
+    window.clearTimeout(timeout)
+  }
+}
+
 function cameraMessage(error: unknown) {
+  if (error instanceof Error && error.message.includes('media_action_timeout')) return 'camera is taking too long. try again in a moment.'
   const failure = typeof error === 'string'
     ? error as MediaDeviceFailure
     : error instanceof Error ? MediaDeviceFailure.getFailure(error) : undefined
@@ -89,10 +102,10 @@ function VideoCallContent({ call, initialCameraIssue }: { call: LiveCallRuntimeS
     setCameraPending(true)
     setCameraIssue(null)
     try {
-      await localParticipant.setCameraEnabled(true, {
+      await waitForMediaAction(() => localParticipant.setCameraEnabled(true, {
         facingMode: 'user',
         resolution: { width: 640, height: 480, frameRate: 20 },
-      })
+      }))
     } catch (error) {
       setCameraIssue(cameraMessage(error))
     } finally {
@@ -116,7 +129,7 @@ function VideoCallContent({ call, initialCameraIssue }: { call: LiveCallRuntimeS
   const toggleMic = () => {
     if (micPending) return
     setMicPending(true)
-    void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+    void waitForMediaAction(() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled))
       .catch(reportCallProblem)
       .finally(() => setMicPending(false))
   }
@@ -125,7 +138,7 @@ function VideoCallContent({ call, initialCameraIssue }: { call: LiveCallRuntimeS
     if (cameraPending) return
     if (isCameraEnabled) {
       setCameraPending(true)
-      void localParticipant.setCameraEnabled(false)
+      void waitForMediaAction(() => localParticipant.setCameraEnabled(false))
         .catch((error) => setCameraIssue(cameraMessage(error)))
         .finally(() => setCameraPending(false))
       return
@@ -139,7 +152,7 @@ function VideoCallContent({ call, initialCameraIssue }: { call: LiveCallRuntimeS
     const currentIndex = cameras.findIndex((camera) => camera.deviceId === activeDeviceId)
     const nextCamera = cameras[(currentIndex + 1) % cameras.length]
     setFlipPending(true)
-    void setActiveMediaDevice(nextCamera.deviceId)
+    void waitForMediaAction(() => setActiveMediaDevice(nextCamera.deviceId))
       .catch((error) => setCameraIssue(cameraMessage(error)))
       .finally(() => setFlipPending(false))
   }

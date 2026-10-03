@@ -29,6 +29,7 @@ function asMessage(error: unknown) {
   if (message.includes('call_already_exists')) return 'someone already started this nonsense.'
   if (message.includes('partner_not_found') || message.includes('couple_not_found') || message.includes('relationship_no_longer_active')) return 'your pairing changed. refresh the page and try again.'
   if (message.includes('call_expired')) return 'they did not pick up. tragic.'
+  if (message.includes('media_action_timeout')) return 'your microphone is still reconnecting. give it another tap in a moment.'
   if (message.includes('microphone') || message.includes('device')) return 'your microphone said no. check its permission and try again.'
   if (message.includes('unauthorized') || message.includes('forbidden')) return 'that call is not yours to join.'
   if (message.includes('network') || message.includes('fetch')) return 'the internet has chosen violence. try again.'

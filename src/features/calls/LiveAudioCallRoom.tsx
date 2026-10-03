@@ -28,6 +28,18 @@ function useCallDuration(answeredAt: string | null) {
   return formatDuration(Math.max(0, Math.floor((now - answered) / 1_000)))
 }
 
+async function waitForMediaAction(operation: () => Promise<unknown>) {
+  let timeout: number | undefined
+  try {
+    await Promise.race([
+      operation(),
+      new Promise((_, reject) => { timeout = window.setTimeout(() => reject(new Error('media_action_timeout')), 8_000) }),
+    ])
+  } finally {
+    window.clearTimeout(timeout)
+  }
+}
+
 function CallProblem({ message }: { message: string }) {
   const { endCall, retryConnection } = useCall()
   return <main className="call-connecting page-shell">
@@ -57,7 +69,7 @@ function AudioCallContent({ call }: { call: LiveCallRuntimeState['call'] }) {
   const handleMicToggle = () => {
     if (!localParticipant || micPending) return
     setMicPending(true)
-    void localParticipant.setMicrophoneEnabled(!micOn)
+    void waitForMediaAction(() => localParticipant.setMicrophoneEnabled(!micOn))
       .catch(reportCallProblem)
       .finally(() => setMicPending(false))
   }
