@@ -43,13 +43,17 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
   }, [])
 
   const emitIntent = useCallback((state: Exclude<WatchPlaybackState, 'empty'>, player: YouTubeIframePlayer) => {
-    if (Date.now() < suppressUntilRef.current) return
     const position = boundedTime(player, player.getCurrentTime())
     const canonical = latestSessionRef.current
     const expected = boundedTime(player, expectedWatchPosition(canonical))
     // Native iframe controls also emit player events. Do not turn a remote action
-    // that we just applied into a second database write.
-    if (canonical.playback_state === state && Math.abs(position - expected) < 1.15) return
+    // that we just applied into a second database write. Check this before the
+    // temporary guard: a real user click that changes play/pause must never be
+    // swallowed merely because a previous remote update was being applied.
+    if (canonical.playback_state === state) {
+      if (Math.abs(position - expected) < 1.15) return
+      if (Date.now() < suppressUntilRef.current) return
+    }
     const last = lastIntentRef.current
     if (last && last.state === state && Math.abs(last.position - position) < .75 && Date.now() - last.at < 1_500) return
     lastIntentRef.current = { state, position, at: Date.now() }
