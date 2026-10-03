@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import { LiveKitRoom, RoomAudioRenderer, StartAudio, useConnectionState, useLocalParticipant, useRemoteParticipants } from '@livekit/components-react'
+import { StartAudio, useConnectionState, useLocalParticipant, useRemoteParticipants } from '@livekit/components-react'
 import { MediaDeviceFailure } from 'livekit-client'
 import { CallControls } from '../../components/room/CallControls'
 import { ParticipantCard } from '../../components/room/ParticipantCard'
@@ -104,7 +104,6 @@ function AudioCallContent({ call }: { call: LiveCallRuntimeState['call'] }) {
         : `waiting for ${partnerName} to connect...`
 
   return <main className="room-page page-shell">
-    <RoomAudioRenderer />
     <StartAudio className="call-start-audio animated-button tone-yellow" label="TAP TO HEAR THEM" />
     <header className="room-header">
       <button className="back-button" onClick={() => void endCall()} aria-label="End call and return home"><ArrowLeft size={18} /> <span>end call</span></button>
@@ -123,23 +122,9 @@ function AudioCallContent({ call }: { call: LiveCallRuntimeState['call'] }) {
 }
 
 export function LiveAudioCallRoom({ session }: { session: LiveCallRuntimeState }) {
-  const { markRoomConnected, reportRoomConnectionError, reportRoomDisconnected } = useCall()
   const attempt = session.attempt
 
-  if (!session.token || !session.serverUrl) return <CallProblem message="the call could not connect." />
-
-  return <CallRoomErrorBoundary key={`${session.call.id}:${attempt}`} fallback={<CallProblem message="your browser tripped over the call room. try again." />}><LiveKitRoom
-    key={`${session.call.id}:${attempt}`}
-    token={session.token}
-    serverUrl={session.serverUrl}
-    connect
-    audio={false}
-    video={false}
-    options={{ disconnectOnPageLeave: true, stopLocalTrackOnUnpublish: true, adaptiveStream: true, dynacast: true }}
-    onConnected={() => markRoomConnected(session.call.id, attempt)}
-    onError={(error) => reportRoomConnectionError(session.call.id, attempt, error)}
-    onDisconnected={(reason) => reportRoomDisconnected(session.call.id, attempt, reason)}
-  >
+  return <CallRoomErrorBoundary key={`${session.call.id}:${attempt}`} fallback={<CallProblem message="your browser tripped over the call room. try again." />}>
     <AudioCallContent call={session.call} />
-  </LiveKitRoom></CallRoomErrorBoundary>
+  </CallRoomErrorBoundary>
 }

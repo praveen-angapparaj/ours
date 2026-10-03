@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, CameraOff } from 'lucide-react'
-import { LiveKitRoom, RoomAudioRenderer, StartMediaButton, VideoTrack, useConnectionState, useLocalParticipant, useRemoteParticipants, useTracks } from '@livekit/components-react'
+import { StartMediaButton, VideoTrack, useConnectionState, useLocalParticipant, useRemoteParticipants, useTracks } from '@livekit/components-react'
 import { MediaDeviceFailure, Track } from 'livekit-client'
 import { CallControls } from '../../components/room/CallControls'
 import { useCouple } from '../couple/use-couple'
@@ -148,7 +148,6 @@ function VideoCallContent({ call }: { call: LiveCallRuntimeState['call'] }) {
         : `waiting for ${partnerName} to connect...`
 
   return <main className="video-call-page page-shell">
-    <RoomAudioRenderer />
     <StartMediaButton className="call-start-audio animated-button tone-yellow" label="TAP TO HEAR & SEE" />
     <header className="room-header">
       <button className="back-button" onClick={() => void endCall()} aria-label="End call and return home"><ArrowLeft size={18} /> <span>end call</span></button>
@@ -178,29 +177,9 @@ function VideoCallContent({ call }: { call: LiveCallRuntimeState['call'] }) {
 }
 
 export function LiveVideoCallRoom({ session }: { session: LiveCallRuntimeState }) {
-  const { markRoomConnected, reportRoomConnectionError, reportRoomDisconnected } = useCall()
   const attempt = session.attempt
 
-  if (!session.token || !session.serverUrl) return <VideoCallProblem message="the call could not connect." />
-
-  return <CallRoomErrorBoundary key={`${session.call.id}:${attempt}`} fallback={<VideoCallProblem message="your browser tripped over the video room. try again." />}><LiveKitRoom
-    key={`${session.call.id}:${attempt}`}
-    token={session.token}
-    serverUrl={session.serverUrl}
-    connect
-    audio={false}
-    video={false}
-    options={{
-      disconnectOnPageLeave: true,
-      stopLocalTrackOnUnpublish: true,
-      adaptiveStream: true,
-      dynacast: true,
-      videoCaptureDefaults: { resolution: { width: 640, height: 480, frameRate: 20 } },
-    }}
-    onConnected={() => markRoomConnected(session.call.id, attempt)}
-    onError={(error) => reportRoomConnectionError(session.call.id, attempt, error)}
-    onDisconnected={(reason) => reportRoomDisconnected(session.call.id, attempt, reason)}
-  >
+  return <CallRoomErrorBoundary key={`${session.call.id}:${attempt}`} fallback={<VideoCallProblem message="your browser tripped over the video room. try again." />}>
     <VideoCallContent call={session.call} />
-  </LiveKitRoom></CallRoomErrorBoundary>
+  </CallRoomErrorBoundary>
 }

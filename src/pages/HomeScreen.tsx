@@ -78,7 +78,7 @@ export function HomeScreen() {
         <p className="eyebrow">your very private corner of the web</p>
         <h1>Wanna<br /><em>hang out?</em></h1>
         <p className="home-copy">Your favourite tiny person is one button away. That seems suspiciously convenient.</p>
-        <div className="hangout-actions">{actions.map((action) => <ActionCard key={action.title} {...action} title={action.kind === 'call' ? `CALL ${partnerPronouns.object.toUpperCase()}` : action.title} onClick={action.kind === 'call' ? () => { prefetchCallRooms(); setCallChoiceOpen(true) } : () => navigate('/room')} />)}</div>
+        <div className="hangout-actions">{actions.map((action) => <ActionCard key={action.title} {...action} title={action.kind === 'call' ? `CALL ${partnerPronouns.object.toUpperCase()}` : action.title} onClick={action.kind === 'call' ? () => { prefetchCallRooms(); setCallChoiceOpen(true) } : action.kind === 'watch' ? () => navigate('/watch') : () => navigate('/room')} />)}</div>
       </motion.section>
       <aside className="home-widgets"><CurrentlyCard partnerStatus={partnerStatus} partnerName={partnerName} onJoin={() => navigate('/room')} /><TogetherCounter startDate={couple?.relationship_started_on ?? null} onSaveDate={setRelationshipDate} /><AnnoyButton onShake={triggerShake} partnerPronouns={partnerPronouns} /><div className="micro-doodle"><Sparkles /><span>very serious<br />business</span></div></aside>
     </div>

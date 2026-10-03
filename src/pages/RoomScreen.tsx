@@ -8,7 +8,6 @@ import { CallControls } from '../components/room/CallControls'
 import { ParticipantCard } from '../components/room/ParticipantCard'
 import { ReactionTray, type ReactionKind } from '../components/room/ReactionTray'
 import { RoomCanvas } from '../components/room/RoomCanvas'
-import { popover } from '../lib/motion'
 import { useCouple } from '../features/couple/use-couple'
 import { profileInitials } from '../features/couple/profile-initials'
 import { useCouplePresence } from '../features/presence/use-couple-presence'
@@ -35,7 +34,6 @@ function BaseRoomContent({ localMicOn, localCameraOn, onMicToggle, onCameraToggl
   const partnerInitial = profileInitials(partnerName, 'M')
   const [reactions, setReactions] = useState<Reaction[]>([])
   const [filtersOn, setFiltersOn] = useState(false)
-  const [mediaOpen, setMediaOpen] = useState(false)
   const [reactionsOpen, setReactionsOpen] = useState(() => !window.matchMedia('(max-width: 760px)').matches)
   const [roomNote, setRoomNote] = useState(`waiting for ${partnerName} to arrive...`)
   const previousStatus = useRef<PartnerPresenceStatus | null>(null)
@@ -71,14 +69,13 @@ function BaseRoomContent({ localMicOn, localCameraOn, onMicToggle, onCameraToggl
     </header>
     <AnimatePresence mode="wait"><motion.p key={roomNote} className="room-presence-note" initial={{ opacity: 0, y: -5, rotate: -1 }} animate={{ opacity: 1, y: 0, rotate: 1 }} exit={{ opacity: 0, y: 4 }}>{roomNote}</motion.p></AnimatePresence>
     <section className="room-stage">
-      <RoomCanvas mode="empty" onMediaSelect={() => { setMediaOpen(true); setReactionsOpen(false) }} />
+      <RoomCanvas mode="empty" onMediaSelect={() => navigate('/watch')} />
       <ParticipantCard name={partnerName} label={partnerStatus === 'in_room' ? 'PARTNER IN ROOM' : 'PARTNER'} avatar={partnerInitial} cameraEnabled={false} microphoneEnabled={false} isSpeaking={false} connectionState="good" variant="coral" isSelf={false} />
       <ParticipantCard name="You" label="YOU, UNFORTUNATELY" avatar=":)" cameraEnabled={localCameraOn} microphoneEnabled={localMicOn} isSpeaking={false} connectionState="good" variant="blue" isSelf filtersEnabled={filtersOn} />
     </section>
     <ReactionTray open={reactionsOpen} onReaction={sendReaction} />
-    <CallControls micOn={localMicOn} cameraOn={localCameraOn} filtersOn={filtersOn} reactionsOpen={reactionsOpen} mediaOpen={mediaOpen} onMic={onMicToggle} onCamera={onCameraToggle} onReactions={() => setReactionsOpen((current) => !current)} onFilters={() => setFiltersOn((current) => !current)} onMedia={() => setMediaOpen((current) => !current)} onHangup={() => navigate('/home')} />
+    <CallControls micOn={localMicOn} cameraOn={localCameraOn} filtersOn={filtersOn} reactionsOpen={reactionsOpen} mediaOpen={false} onMic={onMicToggle} onCamera={onCameraToggle} onReactions={() => setReactionsOpen((current) => !current)} onFilters={() => setFiltersOn((current) => !current)} onMedia={() => navigate('/watch')} onHangup={() => navigate('/home')} />
     <AnimatePresence>{reactions.map((reaction) => <FloatingReaction key={reaction.id} reaction={reaction} onDone={(id) => setReactions((current) => current.filter((item) => item.id !== id))} />)}</AnimatePresence>
-    <AnimatePresence>{mediaOpen && <motion.div className="tiny-media-toast" {...popover}><b>the imaginary queue is ready</b><button onClick={() => setMediaOpen(false)} aria-label="Close media message">x</button></motion.div>}</AnimatePresence>
   </main>
 }
 

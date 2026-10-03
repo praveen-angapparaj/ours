@@ -1,14 +1,14 @@
 # Our Space
 
-Private two-person space with Supabase authentication/signalling and LiveKit audio/video calls.
+Private two-person space with Supabase authentication/signalling, LiveKit audio/video calls, and a synchronized YouTube watch room.
 
-## Production call deployment
+## Production deployment
 
 Pushing this repository deploys the Vite site to Vercel, including the SPA route rewrite in `vercel.json`. It does **not** deploy Supabase database migrations or Edge Functions.
 
-Before testing calls after this revision:
+Before testing calls or Watch Something after this revision:
 
-1. Apply every migration in `supabase/migrations` to the linked Supabase project, in filename order. The current reliability migration is `20261003000003_call_reliability.sql`.
+1. Apply every migration in `supabase/migrations` to the linked Supabase project, in filename order. The current Watch Together migration is `20261003000004_phase6_watch_together.sql`; it creates the RLS-protected session, atomic RPCs, and Realtime publication.
 2. Deploy `supabase/functions/livekit-token`.
 3. Set these Edge Function secrets in Supabase:
    - `LIVEKIT_URL` — the production `wss://…` LiveKit endpoint.
@@ -25,6 +25,10 @@ supabase secrets set LIVEKIT_URL="wss://your-project.livekit.cloud" LIVEKIT_API_
 ```
 
 Use two different paired accounts when testing. The same account on a laptop and phone intentionally disconnects its earlier LiveKit session.
+
+## Verify Watch Something
+
+Use two different paired accounts in separate browsers. Open **Watch Something** on both, paste a normal YouTube watch/share/short/embed link from one account, then play, pause, and seek in either browser. The other browser should follow without a page refresh. A browser may require its own **Tap to join** gesture before it can start audible playback.
 
 ## Verify locally
 
