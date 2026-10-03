@@ -28,6 +28,7 @@ export async function updateCallStatus(callId: string, status: CallStatus): Prom
 export async function getLiveKitToken(callId: string): Promise<{ token: string; serverUrl: string }> {
   const { data, error } = await supabase.functions.invoke('livekit-token', {
     body: { callId },
+    timeout: 12_000,
   });
   if (error) {
     throw new Error(error.message);
@@ -35,7 +36,18 @@ export async function getLiveKitToken(callId: string): Promise<{ token: string; 
   if (data?.error) {
     throw new Error(data.error);
   }
-  return data;
+  if (typeof data?.token !== 'string' || !data.token || typeof data?.serverUrl !== 'string' || !data.serverUrl) {
+    throw new Error('livekit_token_invalid');
+  }
+
+  try {
+    const url = new URL(data.serverUrl);
+    if (url.protocol !== 'wss:' && url.protocol !== 'ws:') throw new Error('invalid_protocol');
+  } catch {
+    throw new Error('livekit_url_invalid');
+  }
+
+  return { token: data.token, serverUrl: data.serverUrl };
 }
 
 export async function getActiveCall(): Promise<Call | null> {
@@ -59,6 +71,13 @@ export async function getActiveCall(): Promise<Call | null> {
 
 export async function expireStaleCalls(): Promise<void> {
   const { error } = await supabase.rpc('expire_stale_calls');
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function touchCall(callId: string): Promise<void> {
+  const { error } = await supabase.rpc('touch_call', { target_call_id: callId });
   if (error) {
     throw new Error(error.message);
   }

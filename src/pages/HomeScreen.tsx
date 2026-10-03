@@ -24,6 +24,14 @@ const actions: HangoutAction[] = [
   { title: 'WATCH SOMETHING', caption: 'argue about the plot', icon: Film, tone: 'yellow', kind: 'watch' },
   { title: 'PLAY MUSIC', caption: 'DJ privileges pending', icon: Headphones, tone: 'lavender', kind: 'music' },
 ]
+
+function prefetchCallRooms() {
+  // Keep WebRTC out of the initial app bundle, but start downloading it as soon
+  // as a person shows intent to call so the room opens without a second wait.
+  void import('../features/calls/LiveAudioCallRoom')
+  void import('../features/calls/LiveVideoCallRoom')
+}
+
 export function HomeScreen() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -47,7 +55,7 @@ export function HomeScreen() {
   ]
   const note = notes[noteIndex]
   const triggerShake = () => { window.clearTimeout(shakeTimer.current); setShaking(true); shakeTimer.current = window.setTimeout(() => setShaking(false), 330) }
-  const beginCall = (callType: CallType) => { setCallChoiceOpen(false); void startCall(callType) }
+  const beginCall = (callType: CallType) => { prefetchCallRooms(); setCallChoiceOpen(false); void startCall(callType) }
   useEffect(() => () => window.clearTimeout(toastTimer.current), [])
   useEffect(() => {
     if (!hydrated || !partner) return
@@ -63,14 +71,14 @@ export function HomeScreen() {
     toastTimer.current = window.setTimeout(() => setPresenceToast(null), 2800)
   }, [hydrated, partner, partnerName, partnerStatus])
   return <main className={`home page-shell ${shaking ? 'screen-shake' : ''}`}>
-    <header className="app-header"><button className="wordmark" onClick={() => navigate('/')} aria-label="Return to landing page">our space<span>TM</span></button><div className="header-people"><UserMenu /><PartnerPresence status={partnerStatus} name={partnerName} onJoin={() => navigate('/room')} onCall={() => void startCall()} /></div></header>
+    <header className="app-header"><button className="wordmark" onClick={() => navigate('/')} aria-label="Return to landing page">our space<span>TM</span></button><div className="header-people"><UserMenu /><PartnerPresence status={partnerStatus} name={partnerName} onJoin={() => navigate('/room')} onCall={() => { prefetchCallRooms(); void startCall() }} /></div></header>
     <div className="home-layout">
       <motion.section className="home-intro" initial={{ opacity: 0, y: 9 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .26 }}>
         <div className="paper-note">{note}</div>
         <p className="eyebrow">your very private corner of the web</p>
         <h1>Wanna<br /><em>hang out?</em></h1>
         <p className="home-copy">Your favourite tiny person is one button away. That seems suspiciously convenient.</p>
-        <div className="hangout-actions">{actions.map((action) => <ActionCard key={action.title} {...action} title={action.kind === 'call' ? `CALL ${partnerPronouns.object.toUpperCase()}` : action.title} onClick={action.kind === 'call' ? () => setCallChoiceOpen(true) : () => navigate('/room')} />)}</div>
+        <div className="hangout-actions">{actions.map((action) => <ActionCard key={action.title} {...action} title={action.kind === 'call' ? `CALL ${partnerPronouns.object.toUpperCase()}` : action.title} onClick={action.kind === 'call' ? () => { prefetchCallRooms(); setCallChoiceOpen(true) } : () => navigate('/room')} />)}</div>
       </motion.section>
       <aside className="home-widgets"><CurrentlyCard partnerStatus={partnerStatus} partnerName={partnerName} onJoin={() => navigate('/room')} /><TogetherCounter startDate={couple?.relationship_started_on ?? null} onSaveDate={setRelationshipDate} /><AnnoyButton onShake={triggerShake} partnerPronouns={partnerPronouns} /><div className="micro-doodle"><Sparkles /><span>very serious<br />business</span></div></aside>
     </div>

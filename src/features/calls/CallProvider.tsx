@@ -1,8 +1,9 @@
 import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { DisconnectReason } from 'livekit-client'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/use-auth'
 import { useCouple } from '../couple/use-couple'
-import { createCall, expireStaleCalls, getActiveCall, getLiveKitToken, updateCallStatus } from './call-service'
+import { createCall, expireStaleCalls, getActiveCall, getLiveKitToken, touchCall, updateCallStatus } from './call-service'
 import { isLiveCallState, type Call, type CallRuntimeState, type CallType } from './types'
 
 type CallContextValue = {
@@ -14,7 +15,9 @@ type CallContextValue = {
   cancelCall: () => Promise<void>
   endCall: () => Promise<void>
   retryConnection: () => void
-  markRoomConnected: (callId: string) => void
+  markRoomConnected: (callId: string, attempt: number) => void
+  reportRoomConnectionError: (callId: string, attempt: number, error: unknown) => void
+  reportRoomDisconnected: (callId: string, attempt: number, reason?: DisconnectReason) => void
   reportCallProblem: (error: unknown) => void
   dismissNotice: () => void
 }
@@ -23,13 +26,19 @@ export const CallContext = createContext<CallContextValue | null>(null)
 
 const activeStatuses = new Set(['ringing', 'accepted'])
 const terminalStatuses = new Set(['declined', 'cancelled', 'missed', 'ended'])
+// LiveKit's protocol value for DUPLICATE_IDENTITY. Keeping this as a local
+// constant preserves call-route code splitting instead of eagerly importing
+// the complete WebRTC client just to format one disconnect message.
+const duplicateIdentityDisconnectReason = 2 as DisconnectReason
+const clientInitiatedDisconnectReason = 1 as DisconnectReason
 
 function asMessage(error: unknown) {
   const message = error instanceof Error ? error.message : 'call_failed'
   if (message.includes('call_already_exists')) return 'someone already started this nonsense.'
   if (message.includes('partner_not_found') || message.includes('couple_not_found') || message.includes('relationship_no_longer_active')) return 'your pairing changed. refresh the page and try again.'
   if (message.includes('call_expired')) return 'they did not pick up. tragic.'
-  if (message.includes('media_action_timeout')) return 'your microphone is still reconnecting. give it another tap in a moment.'
+  if (message.includes('livekit_token_invalid') || message.includes('livekit_url_invalid')) return 'the call server sent an invalid address. check its setup.'
+  if (message.includes('timeout') || message.includes('timed out')) return 'the call server took too long. try again.'
   if (message.includes('microphone') || message.includes('device')) return 'your microphone said no. check its permission and try again.'
   if (message.includes('unauthorized') || message.includes('forbidden')) return 'that call is not yours to join.'
   if (message.includes('network') || message.includes('fetch')) return 'the internet has chosen violence. try again.'
@@ -56,8 +65,13 @@ function terminalMessage(call: Call, userId: string) {
   return 'call ended. back to your regularly scheduled nonsense.'
 }
 
+function disconnectMessage(reason?: DisconnectReason) {
+  if (reason === duplicateIdentityDisconnectReason) return 'this account joined the call somewhere else. close the other tab or device, then try again.'
+  return 'the call connection dropped. try reconnecting.'
+}
+
 export function CallProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth()
+  const { user, session } = useAuth()
   const { couple } = useCouple()
   const [state, setState] = useState<CallRuntimeState>({ status: 'idle' })
   const [notice, setNotice] = useState<string | null>(null)
@@ -92,16 +106,40 @@ export function CallProvider({ children }: { children: ReactNode }) {
       const activeCall = callFromState(current)
 
       if (terminalStatuses.has(call.status)) {
-        if (activeCall?.id !== call.id) return current
-        return { status: 'idle' }
+        return activeCall?.id === call.id ? { status: 'idle' } : current
       }
-
       if (!activeStatuses.has(call.status)) return current
       if (activeCall && activeCall.id !== call.id) return current
-      if (call.status === 'accepted') return { status: 'connecting', call, attempt: 0 }
+
+      if (call.status === 'accepted') {
+        // Realtime may replay the accepted row. Never discard a working token or
+        // regress a connected room back to its loading state.
+        if (current.status === 'connected' || current.status === 'connecting') return current
+        return { status: 'connecting', call, attempt: 0 }
+      }
+
+      // A late ringing event must not tear down a room that has already accepted.
+      if (current.status === 'connecting' || current.status === 'connected') return current
       return stateForCall(call, user.id)
     })
   }, [couple?.id, notify, user])
+
+  const reconcileActiveCall = useCallback(async () => {
+    if (!user || !couple) return
+    const callIdAtRequestStart = callFromState(stateRef.current)?.id ?? null
+    const call = await getActiveCall()
+    if (call) {
+      applyCallUpdate(call)
+      return
+    }
+
+    // If realtime was unavailable, a successful empty query is authoritative
+    // only for the call that existed when this request began. Do not let a
+    // slower initial query erase a call the user just created or accepted.
+    setState((current) => callIdAtRequestStart && callFromState(current)?.id === callIdAtRequestStart
+      ? { status: 'idle' }
+      : current)
+  }, [applyCallUpdate, couple, user])
 
   useEffect(() => {
     if (!user || !couple) {
@@ -116,19 +154,28 @@ export function CallProvider({ children }: { children: ReactNode }) {
     void (async () => {
       try {
         await expireStaleCalls()
-        const call = await getActiveCall()
-        if (!disposed && call) applyCallUpdate(call)
+        if (!disposed) await reconcileActiveCall()
       } catch (error) {
         if (!disposed) notify(asMessage(error))
       }
     })()
 
     return () => { disposed = true }
-  }, [applyCallUpdate, couple?.id, notify, user?.id])
+  }, [couple?.id, notify, reconcileActiveCall, user?.id])
 
   useEffect(() => {
-    if (!user || !couple) return
+    if (session?.access_token) supabase.realtime.setAuth(session.access_token)
+  }, [session?.access_token])
 
+  useEffect(() => {
+    if (!user || !couple || !session?.access_token) return
+    supabase.realtime.setAuth(session.access_token)
+    let disposed = false
+    const sync = () => {
+      void reconcileActiveCall().catch((error) => {
+        if (!disposed) notify(asMessage(error))
+      })
+    }
     const channel = supabase.channel(`calls:${couple.id}`)
       .on('postgres_changes', {
         event: '*',
@@ -136,32 +183,72 @@ export function CallProvider({ children }: { children: ReactNode }) {
         table: 'calls',
         filter: `couple_id=eq.${couple.id}`,
       }, (payload) => {
-        if (payload.eventType === 'DELETE') return
-        applyCallUpdate(payload.new as Call)
+        if (payload.eventType !== 'DELETE') applyCallUpdate(payload.new as Call)
       })
       .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          notify('call updates are reconnecting. hang tight.')
-        }
+        if (status === 'SUBSCRIBED') { sync(); return }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') notify('call updates are reconnecting. hang tight.')
       })
 
-    return () => { void supabase.removeChannel(channel) }
-  }, [applyCallUpdate, couple?.id, notify, user?.id])
+    return () => {
+      disposed = true
+      void supabase.removeChannel(channel)
+    }
+  }, [applyCallUpdate, couple?.id, notify, reconcileActiveCall, session?.access_token, user?.id])
+
+  useEffect(() => {
+    if (!user || !couple || !callFromState(state)) return
+    let disposed = false
+    const sync = () => {
+      void reconcileActiveCall().catch((error) => {
+        if (!disposed) notify(asMessage(error))
+      })
+    }
+    const timer = window.setInterval(sync, 15_000)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') sync()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      disposed = true
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [couple?.id, notify, reconcileActiveCall, state.status, user?.id])
 
   useEffect(() => {
     if (state.status !== 'outgoing-ringing' && state.status !== 'incoming-ringing') return
 
-    const fallbackExpiry = new Date(new Date(state.call.created_at).getTime() + 35_000).getTime()
+    const fallbackExpiry = new Date(new Date(state.call.created_at).getTime() + 60_000).getTime()
     const expiry = Date.parse(state.call.ring_expires_at) || fallbackExpiry
     const timeout = window.setTimeout(() => {
-      void expireStaleCalls().catch((error) => notify(asMessage(error)))
+      void expireStaleCalls().then(reconcileActiveCall).catch((error) => notify(asMessage(error)))
     }, Math.max(0, expiry - Date.now()) + 100)
 
     return () => window.clearTimeout(timeout)
-  }, [notify, state])
+  }, [notify, reconcileActiveCall, state])
+
+  const connectedCallId = state.status === 'connected' ? state.call.id : null
 
   useEffect(() => {
-    if (state.status !== 'connecting' || state.token || state.serverUrl) return
+    if (state.status !== 'connected') return
+    const checkIn = () => {
+      void touchCall(state.call.id).catch(() => undefined)
+    }
+    checkIn()
+    const timer = window.setInterval(checkIn, 30_000)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') checkIn()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [connectedCallId])
+
+  useEffect(() => {
+    if (state.status !== 'connecting' || state.token || state.serverUrl || state.connectionError) return
     const requestKey = `${state.call.id}:${state.attempt}`
     if (tokenRequestRef.current === requestKey) return
 
@@ -172,11 +259,16 @@ export function CallProvider({ children }: { children: ReactNode }) {
           ? { ...current, token, serverUrl }
           : current)
       })
-      .catch((error) => notify(asMessage(error)))
+      .catch((error) => {
+        const message = asMessage(error)
+        setState((current) => current.status === 'connecting' && current.call.id === state.call.id && current.attempt === state.attempt
+          ? { ...current, connectionError: message }
+          : current)
+      })
       .finally(() => {
         if (tokenRequestRef.current === requestKey) tokenRequestRef.current = null
       })
-  }, [notify, state])
+  }, [state])
 
   const startCall = useCallback(async (callType: CallType = 'audio') => {
     if (!user || !couple || actionInFlightRef.current || stateRef.current.status !== 'idle') return
@@ -260,12 +352,26 @@ export function CallProvider({ children }: { children: ReactNode }) {
     const current = stateRef.current
     if (!isLiveCallState(current)) return
     tokenRequestRef.current = null
-    setState({ status: 'connecting', call: current.call, attempt: current.status === 'connecting' ? current.attempt + 1 : 1 })
+    setState({ status: 'connecting', call: current.call, attempt: current.attempt + 1 })
   }, [])
 
-  const markRoomConnected = useCallback((callId: string) => {
-    setState((current) => current.status === 'connecting' && current.call.id === callId && current.token && current.serverUrl
-      ? { status: 'connected', call: current.call, token: current.token, serverUrl: current.serverUrl }
+  const markRoomConnected = useCallback((callId: string, attempt: number) => {
+    setState((current) => current.status === 'connecting' && current.call.id === callId && current.attempt === attempt && current.token && current.serverUrl
+      ? { status: 'connected', call: current.call, token: current.token, serverUrl: current.serverUrl, attempt }
+      : current)
+  }, [])
+
+  const reportRoomConnectionError = useCallback((callId: string, attempt: number, error: unknown) => {
+    const message = asMessage(error)
+    setState((current) => isLiveCallState(current) && current.call.id === callId && current.attempt === attempt
+      ? { status: 'connecting', call: current.call, attempt, connectionError: message }
+      : current)
+  }, [])
+
+  const reportRoomDisconnected = useCallback((callId: string, attempt: number, reason?: DisconnectReason) => {
+    if (reason === clientInitiatedDisconnectReason) return
+    setState((current) => isLiveCallState(current) && current.call.id === callId && current.attempt === attempt
+      ? { status: 'connecting', call: current.call, attempt, connectionError: disconnectMessage(reason) }
       : current)
   }, [])
 
@@ -281,9 +387,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
     endCall,
     retryConnection,
     markRoomConnected,
+    reportRoomConnectionError,
+    reportRoomDisconnected,
     reportCallProblem,
     dismissNotice,
-  }), [acceptCall, cancelCall, declineCall, dismissNotice, endCall, markRoomConnected, notice, reportCallProblem, retryConnection, startCall, state])
+  }), [acceptCall, cancelCall, declineCall, dismissNotice, endCall, markRoomConnected, notice, reportCallProblem, reportRoomConnectionError, reportRoomDisconnected, retryConnection, startCall, state])
 
   return <CallContext.Provider value={value}>{children}</CallContext.Provider>
 }

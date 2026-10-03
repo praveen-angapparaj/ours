@@ -13,6 +13,7 @@ export interface Call {
   ring_expires_at: string;
   answered_at: string | null;
   ended_at: string | null;
+  last_activity_at: string;
 }
 
 export type CallRuntimeState =
@@ -21,8 +22,8 @@ export type CallRuntimeState =
   | { status: 'outgoing-ringing', call: Call }
   | { status: 'incoming-ringing', call: Call }
   | { status: 'accepting', call: Call }
-  | { status: 'connecting', call: Call, token?: string, serverUrl?: string, attempt: number }
-  | { status: 'connected', call: Call, token: string, serverUrl: string };
+  | { status: 'connecting', call: Call, token?: string, serverUrl?: string, attempt: number, connectionError?: string }
+  | { status: 'connected', call: Call, token: string, serverUrl: string, attempt: number };
 
 export type LiveCallRuntimeState = Extract<CallRuntimeState, { status: 'connecting' | 'connected' }>;
 

@@ -93,13 +93,13 @@ function IdleRoomContent() {
   />
 }
 
-function CallConnecting({ call }: { call: LiveCallRuntimeState['call'] }) {
+function CallConnecting({ call, error }: { call: LiveCallRuntimeState['call'], error?: string }) {
   const { endCall, retryConnection } = useCall()
   return <main className="call-connecting page-shell">
     <section className="call-connecting-card">
       <p className="eyebrow">{call.call_type} call</p>
-      <h1>getting the tiny wires connected...</h1>
-      <p>{call.call_type === 'video' ? 'your microphone and camera only wake up once this part is ready.' : 'your microphone will only wake up once this part is ready.'}</p>
+      <h1>{error ?? 'getting the tiny wires connected...'}</h1>
+      <p>{error ? 'you can try again without ending the call.' : call.call_type === 'video' ? 'your microphone and camera only wake up once this part is ready.' : 'your microphone will only wake up once this part is ready.'}</p>
       <div className="call-problem-actions"><button className="animated-button tone-yellow" onClick={retryConnection}>TRY AGAIN</button><button className="animated-button tone-coral" onClick={() => void endCall()}>END CALL</button></div>
       <small>call #{call.id.slice(0, 8)}</small>
     </section>
@@ -124,7 +124,8 @@ export function RoomScreen() {
   }, [liveState, navigate])
 
   if (liveState) {
-    if (!liveState.token || !liveState.serverUrl) return <CallConnecting call={liveState.call} />
+    const connectionError = liveState.status === 'connecting' ? liveState.connectionError : undefined
+    if (connectionError || !liveState.token || !liveState.serverUrl) return <CallConnecting call={liveState.call} error={connectionError} />
     return <Suspense fallback={<CallConnecting call={liveState.call} />}>{liveState.call.call_type === 'video' ? <LiveVideoCallRoom session={liveState} /> : <LiveAudioCallRoom session={liveState} />}</Suspense>
   }
   return <IdleRoomContent />

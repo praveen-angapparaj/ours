@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useCall } from './use-call';
 import { useCouple } from '../couple/use-couple';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { isLiveCallState } from './types';
 
@@ -9,16 +9,17 @@ export function CallOverlays() {
   const { state, notice, acceptCall, declineCall, cancelCall, dismissNotice } = useCall();
   const { partner } = useCouple();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const partnerName = partner?.display_name ?? 'your person';
   const incomingVideo = state.status === 'incoming-ringing' && state.call.call_type === 'video';
   const outgoingVideo = (state.status === 'outgoing-ringing' || state.status === 'accepting') && state.call.call_type === 'video';
 
   useEffect(() => {
-    if (isLiveCallState(state)) {
-      navigate('/room');
+    if (isLiveCallState(state) && location.pathname !== '/room') {
+      navigate('/room', { replace: true });
     }
-  }, [state, navigate]);
+  }, [location.pathname, navigate, state]);
 
   return (
     <>
