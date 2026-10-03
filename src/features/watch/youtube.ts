@@ -41,32 +41,7 @@ declare global {
   }
 }
 
-const youtubeId = /^[A-Za-z0-9_-]{11}$/
 let iframeApiPromise: Promise<YouTubeNamespace> | null = null
-
-export function parseYouTubeUrl(rawUrl: string) {
-  const candidate = rawUrl.trim()
-  if (!candidate) return { mediaId: null, error: 'Paste a YouTube video link first.' }
-
-  let url: URL
-  try {
-    url = new URL(/^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`)
-  } catch {
-    return { mediaId: null, error: 'That does not look like a YouTube link.' }
-  }
-
-  const host = url.hostname.toLowerCase().replace(/^www\./, '')
-  let mediaId: string | null = null
-  if (host === 'youtu.be') mediaId = url.pathname.split('/').filter(Boolean)[0] ?? null
-  if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
-    const segments = url.pathname.split('/').filter(Boolean)
-    if (url.pathname === '/watch') mediaId = url.searchParams.get('v')
-    if (segments[0] === 'shorts' || segments[0] === 'embed') mediaId = segments[1] ?? null
-  }
-
-  if (!mediaId || !youtubeId.test(mediaId)) return { mediaId: null, error: 'Use a normal YouTube watch, short, share, or embed link.' }
-  return { mediaId, error: null }
-}
 
 export function loadYouTubeIframeApi(): Promise<YouTubeNamespace> {
   if (typeof window === 'undefined') return Promise.reject(new Error('youtube_player_requires_a_browser'))

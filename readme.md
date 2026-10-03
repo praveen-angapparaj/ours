@@ -30,7 +30,7 @@ Use two different paired accounts when testing. The same account on a laptop and
 
 ## Verify Watch Something
 
-Use two different paired accounts in separate browsers. Open **Watch Something** on both, paste a normal YouTube watch/share/short/embed link from one account, then play, pause, and seek in either browser. The other browser should follow without a page refresh. A browser may require its own **Tap to join** gesture before it can start audible playback.
+Use two different paired accounts in separate browsers. Open **Watch Something** on both, search for an embeddable YouTube video from one account, then play, pause, and seek in either browser. The other browser should follow without a page refresh. A browser may require its own **Tap to join** gesture before it can start audible playback.
 
 ## Verify locally
 
