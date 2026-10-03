@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, CameraOff } from 'lucide-react'
-import { LiveKitRoom, RoomAudioRenderer, VideoTrack, useConnectionState, useLocalParticipant, useMediaDeviceSelect, useRemoteParticipants, useTracks } from '@livekit/components-react'
+import { LiveKitRoom, RoomAudioRenderer, StartAudio, VideoTrack, useConnectionState, useLocalParticipant, useMediaDeviceSelect, useRemoteParticipants, useTracks } from '@livekit/components-react'
 import { MediaDeviceFailure, Track } from 'livekit-client'
 import { CallControls } from '../../components/room/CallControls'
 import { useCouple } from '../couple/use-couple'
 import { profileInitials } from '../couple/profile-initials'
 import { useCall } from './use-call'
+import { CallRoomErrorBoundary } from './CallRoomErrorBoundary'
 import type { LiveCallRuntimeState } from './types'
 
 function formatDuration(seconds: number) {
@@ -65,6 +66,9 @@ function VideoCallContent({ call, initialCameraIssue }: { call: LiveCallRuntimeS
   const connectionState = useConnectionState()
   const cameraTracks = useTracks([Track.Source.Camera])
   const [cameraIssue, setCameraIssue] = useState<string | null>(initialCameraIssue)
+  const [micPending, setMicPending] = useState(false)
+  const [cameraPending, setCameraPending] = useState(false)
+  const [flipPending, setFlipPending] = useState(false)
   const cameraAttempted = useRef(false)
   const partnerName = partner?.display_name ?? 'your person'
   const remoteParticipant = remoteParticipants[0]
@@ -81,16 +85,20 @@ function VideoCallContent({ call, initialCameraIssue }: { call: LiveCallRuntimeS
   useEffect(() => { if (initialCameraIssue) setCameraIssue(initialCameraIssue) }, [initialCameraIssue])
 
   const enableCamera = useCallback(async () => {
+    if (cameraPending) return
+    setCameraPending(true)
     setCameraIssue(null)
     try {
       await localParticipant.setCameraEnabled(true, {
         facingMode: 'user',
-        resolution: { width: 960, height: 720, frameRate: 24 },
+        resolution: { width: 640, height: 480, frameRate: 20 },
       })
     } catch (error) {
       setCameraIssue(cameraMessage(error))
+    } finally {
+      setCameraPending(false)
     }
-  }, [localParticipant])
+  }, [cameraPending, localParticipant])
 
   useEffect(() => {
     if (connectionState !== 'connected' || isCameraEnabled || cameraAttempted.current) return
@@ -106,12 +114,20 @@ function VideoCallContent({ call, initialCameraIssue }: { call: LiveCallRuntimeS
   }, [localParticipant])
 
   const toggleMic = () => {
-    void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled).catch(reportCallProblem)
+    if (micPending) return
+    setMicPending(true)
+    void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+      .catch(reportCallProblem)
+      .finally(() => setMicPending(false))
   }
 
   const toggleCamera = () => {
+    if (cameraPending) return
     if (isCameraEnabled) {
-      void localParticipant.setCameraEnabled(false).catch((error) => setCameraIssue(cameraMessage(error)))
+      setCameraPending(true)
+      void localParticipant.setCameraEnabled(false)
+        .catch((error) => setCameraIssue(cameraMessage(error)))
+        .finally(() => setCameraPending(false))
       return
     }
     cameraAttempted.current = true
@@ -119,10 +135,13 @@ function VideoCallContent({ call, initialCameraIssue }: { call: LiveCallRuntimeS
   }
 
   const flipCamera = () => {
-    if (cameras.length < 2) return
+    if (cameras.length < 2 || flipPending) return
     const currentIndex = cameras.findIndex((camera) => camera.deviceId === activeDeviceId)
     const nextCamera = cameras[(currentIndex + 1) % cameras.length]
-    void setActiveMediaDevice(nextCamera.deviceId).catch((error) => setCameraIssue(cameraMessage(error)))
+    setFlipPending(true)
+    void setActiveMediaDevice(nextCamera.deviceId)
+      .catch((error) => setCameraIssue(cameraMessage(error)))
+      .finally(() => setFlipPending(false))
   }
 
   const note = reconnecting
@@ -133,6 +152,7 @@ function VideoCallContent({ call, initialCameraIssue }: { call: LiveCallRuntimeS
 
   return <main className="video-call-page page-shell">
     <RoomAudioRenderer />
+    <StartAudio className="call-start-audio animated-button tone-yellow" label="TAP TO HEAR THEM" />
     <header className="room-header">
       <button className="back-button" onClick={() => void endCall()} aria-label="End call and return home"><ArrowLeft size={18} /> <span>end call</span></button>
       <div className="room-name"><span className="room-live-dot" />video call in progress</div>
@@ -156,7 +176,7 @@ function VideoCallContent({ call, initialCameraIssue }: { call: LiveCallRuntimeS
       </aside>
     </section>
     <div className="video-call-meta"><b aria-label={`Call duration ${callDuration}`}>{callDuration}</b><span>somehow still talking.</span></div>
-    <CallControls micOn={isMicrophoneEnabled} cameraOn={isCameraEnabled} filtersOn={false} reactionsOpen={false} mediaOpen={false} videoOnly showFlipCamera={isCameraEnabled && cameras.length > 1} onMic={toggleMic} onCamera={toggleCamera} onFlipCamera={flipCamera} onReactions={() => undefined} onFilters={() => undefined} onMedia={() => undefined} onHangup={() => void endCall()} />
+    <CallControls micOn={isMicrophoneEnabled} micPending={micPending} cameraOn={isCameraEnabled} cameraPending={cameraPending} flipPending={flipPending} filtersOn={false} reactionsOpen={false} mediaOpen={false} videoOnly showFlipCamera={isCameraEnabled && cameras.length > 1} onMic={toggleMic} onCamera={toggleCamera} onFlipCamera={flipCamera} onReactions={() => undefined} onFilters={() => undefined} onMedia={() => undefined} onHangup={() => void endCall()} />
   </main>
 }
 
@@ -171,14 +191,14 @@ export function LiveVideoCallRoom({ session }: { session: LiveCallRuntimeState }
   if (!session.token || !session.serverUrl) return <VideoCallProblem message="the call could not connect." />
   if (connectionError) return <VideoCallProblem message={connectionError} />
 
-  return <LiveKitRoom
+  return <CallRoomErrorBoundary key={`${session.call.id}:${attempt}`} fallback={<VideoCallProblem message="your browser tripped over the video room. try again." />}><LiveKitRoom
     key={`${session.call.id}:${attempt}`}
     token={session.token}
     serverUrl={session.serverUrl}
     connect
     audio
     video={false}
-    options={{ disconnectOnPageLeave: true, stopLocalTrackOnUnpublish: true }}
+    options={{ disconnectOnPageLeave: true, stopLocalTrackOnUnpublish: true, adaptiveStream: true, dynacast: true }}
     onConnected={() => markRoomConnected(session.call.id)}
     onError={(error) => setConnectionError(error.message || 'the call could not connect.')}
     onMediaDeviceFailure={(failure, kind) => {
@@ -187,5 +207,5 @@ export function LiveVideoCallRoom({ session }: { session: LiveCallRuntimeState }
     }}
   >
     <VideoCallContent call={session.call} initialCameraIssue={cameraIssue} />
-  </LiveKitRoom>
+  </LiveKitRoom></CallRoomErrorBoundary>
 }

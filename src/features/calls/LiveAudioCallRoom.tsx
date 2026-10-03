@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import { LiveKitRoom, RoomAudioRenderer, useConnectionState, useLocalParticipant, useRemoteParticipants } from '@livekit/components-react'
+import { LiveKitRoom, RoomAudioRenderer, StartAudio, useConnectionState, useLocalParticipant, useRemoteParticipants } from '@livekit/components-react'
 import { CallControls } from '../../components/room/CallControls'
 import { ParticipantCard } from '../../components/room/ParticipantCard'
 import { RoomCanvas } from '../../components/room/RoomCanvas'
 import { useCouple } from '../couple/use-couple'
 import { profileInitials } from '../couple/profile-initials'
 import { useCall } from './use-call'
+import { CallRoomErrorBoundary } from './CallRoomErrorBoundary'
 import type { LiveCallRuntimeState } from './types'
 
 function formatDuration(seconds: number) {
@@ -50,11 +51,15 @@ function AudioCallContent({ call }: { call: LiveCallRuntimeState['call'] }) {
   const remoteParticipant = remoteParticipants[0]
   const callDuration = useCallDuration(call.answered_at)
   const micOn = localParticipant?.isMicrophoneEnabled ?? false
+  const [micPending, setMicPending] = useState(false)
   const reconnecting = connectionState === 'reconnecting' || connectionState === 'signalReconnecting'
 
   const handleMicToggle = () => {
-    if (!localParticipant) return
-    void localParticipant.setMicrophoneEnabled(!micOn).catch(reportCallProblem)
+    if (!localParticipant || micPending) return
+    setMicPending(true)
+    void localParticipant.setMicrophoneEnabled(!micOn)
+      .catch(reportCallProblem)
+      .finally(() => setMicPending(false))
   }
 
   const note = reconnecting
@@ -65,6 +70,7 @@ function AudioCallContent({ call }: { call: LiveCallRuntimeState['call'] }) {
 
   return <main className="room-page page-shell">
     <RoomAudioRenderer />
+    <StartAudio className="call-start-audio animated-button tone-yellow" label="TAP TO HEAR THEM" />
     <header className="room-header">
       <button className="back-button" onClick={() => void endCall()} aria-label="End call and return home"><ArrowLeft size={18} /> <span>end call</span></button>
       <div className="room-name"><span className="room-live-dot" />audio call in progress</div>
@@ -77,7 +83,7 @@ function AudioCallContent({ call }: { call: LiveCallRuntimeState['call'] }) {
       <ParticipantCard name={partnerName} label={remoteParticipant ? 'PARTNER IN CALL' : 'CONNECTING...'} avatar={partnerInitial} cameraEnabled={false} microphoneEnabled={remoteParticipant?.isMicrophoneEnabled ?? false} isSpeaking={remoteParticipant?.isSpeaking ?? false} connectionState={remoteParticipant ? 'good' : 'poor'} variant="coral" isSelf={false} />
       <ParticipantCard name="You" label="YOU, UNFORTUNATELY" avatar=":)" cameraEnabled={false} microphoneEnabled={micOn} isSpeaking={localParticipant?.isSpeaking ?? false} connectionState="good" variant="blue" isSelf />
     </section>
-    <CallControls micOn={micOn} cameraOn={false} filtersOn={false} reactionsOpen={false} mediaOpen={false} audioOnly onMic={handleMicToggle} onCamera={() => undefined} onReactions={() => undefined} onFilters={() => undefined} onMedia={() => undefined} onHangup={() => void endCall()} />
+    <CallControls micOn={micOn} micPending={micPending} cameraOn={false} filtersOn={false} reactionsOpen={false} mediaOpen={false} audioOnly onMic={handleMicToggle} onCamera={() => undefined} onReactions={() => undefined} onFilters={() => undefined} onMedia={() => undefined} onHangup={() => void endCall()} />
   </main>
 }
 
@@ -91,18 +97,18 @@ export function LiveAudioCallRoom({ session }: { session: LiveCallRuntimeState }
   if (!session.token || !session.serverUrl) return <CallProblem message="the call could not connect." />
   if (connectionError) return <CallProblem message={connectionError} />
 
-  return <LiveKitRoom
+  return <CallRoomErrorBoundary key={`${session.call.id}:${attempt}`} fallback={<CallProblem message="your browser tripped over the call room. try again." />}><LiveKitRoom
     key={`${session.call.id}:${attempt}`}
     token={session.token}
     serverUrl={session.serverUrl}
     connect
     audio
     video={false}
-    options={{ disconnectOnPageLeave: true, stopLocalTrackOnUnpublish: true }}
+    options={{ disconnectOnPageLeave: true, stopLocalTrackOnUnpublish: true, adaptiveStream: true, dynacast: true }}
     onConnected={() => markRoomConnected(session.call.id)}
     onError={(error) => setConnectionError(error.message || 'the call could not connect.')}
     onMediaDeviceFailure={() => setConnectionError('your microphone said no.')}
   >
     <AudioCallContent call={session.call} />
-  </LiveKitRoom>
+  </LiveKitRoom></CallRoomErrorBoundary>
 }
