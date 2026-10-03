@@ -21,11 +21,12 @@ const LiveVideoCallRoom = lazy(() => import('../features/calls/LiveVideoCallRoom
 type BaseRoomContentProps = {
   localMicOn: boolean
   localCameraOn: boolean
+  mediaAvailable: boolean
   onMicToggle: () => void
   onCameraToggle: () => void
 }
 
-function BaseRoomContent({ localMicOn, localCameraOn, onMicToggle, onCameraToggle }: BaseRoomContentProps) {
+function BaseRoomContent({ localMicOn, localCameraOn, mediaAvailable, onMicToggle, onCameraToggle }: BaseRoomContentProps) {
   const navigate = useNavigate()
   const { partner } = useCouple()
   const { partnerStatus, hydrated } = useCouplePresence()
@@ -69,24 +70,23 @@ function BaseRoomContent({ localMicOn, localCameraOn, onMicToggle, onCameraToggl
     </header>
     <AnimatePresence mode="wait"><motion.p key={roomNote} className="room-presence-note" initial={{ opacity: 0, y: -5, rotate: -1 }} animate={{ opacity: 1, y: 0, rotate: 1 }} exit={{ opacity: 0, y: 4 }}>{roomNote}</motion.p></AnimatePresence>
     <section className="room-stage">
-      <RoomCanvas mode="empty" onMediaSelect={() => navigate('/watch')} />
+      <RoomCanvas mode="empty" onMediaSelect={(kind) => navigate(kind === 'music' ? '/watch?category=music' : '/watch')} />
       <ParticipantCard name={partnerName} label={partnerStatus === 'in_room' ? 'PARTNER IN ROOM' : 'PARTNER'} avatar={partnerInitial} cameraEnabled={false} microphoneEnabled={false} isSpeaking={false} connectionState="good" variant="coral" isSelf={false} />
       <ParticipantCard name="You" label="YOU, UNFORTUNATELY" avatar=":)" cameraEnabled={localCameraOn} microphoneEnabled={localMicOn} isSpeaking={false} connectionState="good" variant="blue" isSelf filtersEnabled={filtersOn} />
     </section>
     <ReactionTray open={reactionsOpen} onReaction={sendReaction} />
-    <CallControls micOn={localMicOn} cameraOn={localCameraOn} filtersOn={filtersOn} reactionsOpen={reactionsOpen} mediaOpen={false} onMic={onMicToggle} onCamera={onCameraToggle} onReactions={() => setReactionsOpen((current) => !current)} onFilters={() => setFiltersOn((current) => !current)} onMedia={() => navigate('/watch')} onHangup={() => navigate('/home')} />
+    <CallControls micOn={localMicOn} cameraOn={localCameraOn} filtersOn={filtersOn} reactionsOpen={reactionsOpen} mediaOpen={false} mediaUnavailable={!mediaAvailable} onMic={onMicToggle} onCamera={onCameraToggle} onReactions={() => setReactionsOpen((current) => !current)} onFilters={() => setFiltersOn((current) => !current)} onMedia={() => navigate('/watch')} onHangup={() => navigate('/home')} />
     <AnimatePresence>{reactions.map((reaction) => <FloatingReaction key={reaction.id} reaction={reaction} onDone={(id) => setReactions((current) => current.filter((item) => item.id !== id))} />)}</AnimatePresence>
   </main>
 }
 
 function IdleRoomContent() {
-  const [micOn, setMicOn] = useState(true)
-  const [cameraOn, setCameraOn] = useState(true)
   return <BaseRoomContent
-    localMicOn={micOn}
-    localCameraOn={cameraOn}
-    onMicToggle={() => setMicOn((current) => !current)}
-    onCameraToggle={() => setCameraOn((current) => !current)}
+    localMicOn={false}
+    localCameraOn={false}
+    mediaAvailable={false}
+    onMicToggle={() => undefined}
+    onCameraToggle={() => undefined}
   />
 }
 

@@ -56,7 +56,7 @@ export function HomeScreen() {
   const note = notes[noteIndex]
   const triggerShake = () => { window.clearTimeout(shakeTimer.current); setShaking(true); shakeTimer.current = window.setTimeout(() => setShaking(false), 330) }
   const beginCall = (callType: CallType) => { prefetchCallRooms(); setCallChoiceOpen(false); void startCall(callType) }
-  useEffect(() => () => window.clearTimeout(toastTimer.current), [])
+  useEffect(() => () => { window.clearTimeout(shakeTimer.current); window.clearTimeout(toastTimer.current) }, [])
   useEffect(() => {
     if (!hydrated || !partner) return
     const previous = previousStatus.current
@@ -71,14 +71,14 @@ export function HomeScreen() {
     toastTimer.current = window.setTimeout(() => setPresenceToast(null), 2800)
   }, [hydrated, partner, partnerName, partnerStatus])
   return <main className={`home page-shell ${shaking ? 'screen-shake' : ''}`}>
-    <header className="app-header"><button className="wordmark" onClick={() => navigate('/')} aria-label="Return to landing page">our space<span>TM</span></button><div className="header-people"><UserMenu /><PartnerPresence status={partnerStatus} name={partnerName} onJoin={() => navigate('/room')} onCall={() => { prefetchCallRooms(); void startCall() }} /></div></header>
+    <header className="app-header"><button className="wordmark" onClick={() => navigate('/home')} aria-label="Return to home">our space<span>TM</span></button><div className="header-people"><UserMenu /><PartnerPresence status={partnerStatus} name={partnerName} onJoin={() => navigate('/room')} onCall={() => { prefetchCallRooms(); void startCall() }} /></div></header>
     <div className="home-layout">
       <motion.section className="home-intro" initial={{ opacity: 0, y: 9 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .26 }}>
         <div className="paper-note">{note}</div>
         <p className="eyebrow">your very private corner of the web</p>
         <h1>Wanna<br /><em>hang out?</em></h1>
         <p className="home-copy">Your favourite tiny person is one button away. That seems suspiciously convenient.</p>
-        <div className="hangout-actions">{actions.map((action) => <ActionCard key={action.title} {...action} title={action.kind === 'call' ? `CALL ${partnerPronouns.object.toUpperCase()}` : action.title} onClick={action.kind === 'call' ? () => { prefetchCallRooms(); setCallChoiceOpen(true) } : action.kind === 'watch' ? () => navigate('/watch') : () => navigate('/room')} />)}</div>
+        <div className="hangout-actions">{actions.map((action) => <ActionCard key={action.title} {...action} title={action.kind === 'call' ? `CALL ${partnerPronouns.object.toUpperCase()}` : action.title} onClick={action.kind === 'call' ? () => { prefetchCallRooms(); setCallChoiceOpen(true) } : action.kind === 'watch' ? () => navigate('/watch') : () => navigate('/watch?category=music')} />)}</div>
       </motion.section>
       <aside className="home-widgets"><CurrentlyCard partnerStatus={partnerStatus} partnerName={partnerName} onJoin={() => navigate('/room')} /><TogetherCounter startDate={couple?.relationship_started_on ?? null} onSaveDate={setRelationshipDate} /><AnnoyButton onShake={triggerShake} partnerPronouns={partnerPronouns} /><div className="micro-doodle"><Sparkles /><span>very serious<br />business</span></div></aside>
     </div>

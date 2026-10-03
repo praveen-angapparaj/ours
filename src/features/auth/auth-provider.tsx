@@ -39,12 +39,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) { setProfile(null); return }
     const nextProfile = await getMyProfile(user.id)
     if (!nextProfile) {
-      // A test-data reset can remove auth.users while this browser still has a cached JWT.
-      // Clear that local session so it cannot create rows for a deleted account.
-      await supabase.auth.signOut({ scope: 'local' })
-      setSession(null)
+      // A profile row can briefly be unavailable immediately after sign-up or
+      // during a database refresh. A missing row is not proof that the
+      // authenticated account was deleted, so retain the valid auth session.
       setProfile(null)
-      throw new Error('account_was_deleted')
+      return
     }
     setProfile(nextProfile)
   }, [user])

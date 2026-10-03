@@ -1,6 +1,6 @@
 import { Check, Copy, LogOut, Pencil, Save, UserRound, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../features/auth/use-auth'
 import { asPronounSet, pronounOptions } from '../../features/auth/pronouns'
@@ -19,11 +19,13 @@ export function UserMenu() {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [codeCopied, setCodeCopied] = useState(false)
+  const copyTimer = useRef<number | undefined>(undefined)
   useEffect(() => { setName(profile?.display_name ?? ''); setAvatarUrl(profile?.avatar_url ?? ''); setPronounSet(profile?.pronoun_set ?? 'they_them') }, [profile])
+  useEffect(() => () => window.clearTimeout(copyTimer.current), [])
   const initial = profileInitials(profile?.display_name, 'Y')
   const copyPermanentCode = async () => {
     if (!couple) return
-    try { await navigator.clipboard.writeText(couple.invite_code); setCodeCopied(true); window.setTimeout(() => setCodeCopied(false), 1600) } catch { setMessage('copying was blocked by your browser. Please select the code manually.') }
+    try { await navigator.clipboard.writeText(couple.invite_code); setCodeCopied(true); window.clearTimeout(copyTimer.current); copyTimer.current = window.setTimeout(() => setCodeCopied(false), 1600) } catch { setMessage('copying was blocked by your browser. Please select the code manually.') }
   }
   const save = async () => { setBusy(true); setMessage(null); try { await updateProfile(name, avatarUrl, pronounSet === 'she_her' || pronounSet === 'he_him' ? pronounSet : 'they_them'); setMessage('saved. new era.') } catch { setMessage('could not save your profile. Try again.') } finally { setBusy(false) } }
   const leaveSettings = () => { setOpen(false); navigate('/home') }

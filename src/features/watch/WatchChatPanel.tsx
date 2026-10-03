@@ -42,13 +42,18 @@ export function WatchChatPanel({ onClose }: { onClose: () => void }) {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const messageListRef = useRef<HTMLDivElement | null>(null)
   const partnerName = partner?.display_name ?? 'your person'
+  const realtimeReady = Boolean(session?.access_token)
 
   const appendMessage = useCallback((message: ChatMessage) => {
     setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message].slice(-MAX_MESSAGES))
   }, [])
 
   useEffect(() => {
-    if (!user || !session?.access_token || !couple || pairingState !== 'paired') {
+    if (session?.access_token) supabase.realtime.setAuth(session.access_token)
+  }, [session?.access_token])
+
+  useEffect(() => {
+    if (!user?.id || !realtimeReady || !couple || pairingState !== 'paired') {
       setConnection('disconnected')
       return
     }
@@ -57,7 +62,6 @@ export function WatchChatPanel({ onClose }: { onClose: () => void }) {
     const topic = `couple:${couple.id}:watch-chat`
     setConnection('connecting')
     setSendError(null)
-    supabase.realtime.setAuth(session.access_token)
     const channel = supabase
       .channel(topic, { config: { private: true, broadcast: { self: false, ack: true } } })
       .on<ChatPayload>('broadcast', { event: 'watch-chat' }, ({ payload }) => {
@@ -78,7 +82,7 @@ export function WatchChatPanel({ onClose }: { onClose: () => void }) {
       channelRef.current = null
       void supabase.removeChannel(channel)
     }
-  }, [appendMessage, couple?.id, pairingState, session?.access_token, user])
+  }, [appendMessage, couple?.id, pairingState, realtimeReady, user?.id])
 
   useEffect(() => {
     const list = messageListRef.current
@@ -92,8 +96,14 @@ export function WatchChatPanel({ onClose }: { onClose: () => void }) {
     setDraft('')
     setSendError(null)
     appendMessage(message)
-    const result = await channelRef.current.send({ type: 'broadcast', event: 'watch-chat', payload: message })
-    if (result === 'ok') return
+    const channel = channelRef.current
+    let sent = false
+    try {
+      sent = (await channel.send({ type: 'broadcast', event: 'watch-chat', payload: message })) === 'ok'
+    } catch {
+      sent = false
+    }
+    if (sent) return
     setMessages((current) => current.map((item) => item.id === message.id ? { ...item, failed: true } : item))
     setSendError('That message did not send. Try again when chat reconnects.')
   }, [appendMessage, connection, draft, user])

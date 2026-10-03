@@ -34,9 +34,19 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
   const suppressUntilRef = useRef(0)
   const lastIntentRef = useRef<{ state: Exclude<WatchPlaybackState, 'empty'>; position: number; at: number } | null>(null)
   const autoplayReportedVersionRef = useRef<number | null>(null)
+  const timeoutsRef = useRef<Set<number>>(new Set())
   const [ready, setReady] = useState(false)
 
   useEffect(() => { latestSessionRef.current = session }, [session])
+  useEffect(() => () => { timeoutsRef.current.forEach((timer) => window.clearTimeout(timer)); timeoutsRef.current.clear() }, [])
+
+  const scheduleTimeout = useCallback((callback: () => void, delay: number) => {
+    const timer = window.setTimeout(() => {
+      timeoutsRef.current.delete(timer)
+      callback()
+    }, delay)
+    timeoutsRef.current.add(timer)
+  }, [])
 
   const setSuppression = useCallback((milliseconds = 3_500) => {
     suppressUntilRef.current = Math.max(suppressUntilRef.current, Date.now() + milliseconds)
@@ -84,7 +94,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
 
     if (next.playback_state === 'playing') {
       player.playVideo()
-      window.setTimeout(() => {
+      scheduleTimeout(() => {
         if (latestSessionRef.current.state_version !== next.state_version || !playerRef.current) return
         if (playerRef.current.getPlayerState() === PLAYER_STATE.PLAYING) { onAutoplayBlocked(false); return }
         if (autoplayReportedVersionRef.current !== next.state_version) {
@@ -96,7 +106,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
       player.pauseVideo()
       onAutoplayBlocked(false)
     }
-  }, [onAutoplayBlocked, setSuppression])
+  }, [onAutoplayBlocked, scheduleTimeout, setSuppression])
 
   useEffect(() => {
     let disposed = false
@@ -192,11 +202,11 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
       setSuppression()
       player.seekTo(boundedTime(player, expectedWatchPosition(current)), true)
       player.playVideo()
-      window.setTimeout(() => {
+      scheduleTimeout(() => {
         if (playerRef.current?.getPlayerState() === PLAYER_STATE.PLAYING) onAutoplayBlocked(false)
       }, 400)
     },
-  }), [onAutoplayBlocked, onIntent, setSuppression])
+  }), [onAutoplayBlocked, onIntent, scheduleTimeout, setSuppression])
 
   return <div className="youtube-player-shell" aria-label="Shared YouTube player"><div ref={hostRef} className="youtube-player-host" /></div>
 })

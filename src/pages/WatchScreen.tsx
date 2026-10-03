@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ChevronLeft, ChevronRight, LoaderCircle, Maximize2, Minimize2, RefreshCw, Search, Tv, Volume2, X } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WatchCallPanel } from '../features/watch/WatchCallPanel'
 import { WatchChatPanel } from '../features/watch/WatchChatPanel'
 import { YouTubePlayer, type YouTubePlayerHandle } from '../features/watch/YouTubePlayer'
+import { WatchPlayerErrorBoundary } from '../features/watch/WatchPlayerErrorBoundary'
 import { YouTubeSearch } from '../features/watch/YouTubeSearch'
 import type { YouTubeSearchCategory } from '../features/watch/youtube-search-service'
 import { useWatch } from '../features/watch/use-watch'
@@ -18,15 +19,17 @@ function playbackCopy(state: 'empty' | 'paused' | 'playing' | 'ended') {
 
 export function WatchScreen() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { session, loading, saving, error, realtimeState, setVideo, setPlayback, clearVideo, refresh, clearError } = useWatch()
   const { setWatchActivity } = useNightEnvironment()
   const playerRef = useRef<YouTubePlayerHandle | null>(null)
   const [playerError, setPlayerError] = useState<string | null>(null)
   const [autoplayBlocked, setAutoplayBlocked] = useState(false)
   const [searchOpen, setSearchOpen] = useState(true)
-  const [searchCategory, setSearchCategory] = useState<YouTubeSearchCategory>('video')
+  const [searchCategory, setSearchCategory] = useState<YouTubeSearchCategory>(() => searchParams.get('category') === 'music' ? 'music' : 'video')
   const [chatOpen, setChatOpen] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
+  const [playerAttempt, setPlayerAttempt] = useState(0)
 
   useEffect(() => {
     if (session?.playback_state !== 'playing') setAutoplayBlocked(false)
@@ -67,7 +70,9 @@ export function WatchScreen() {
       <section className="watch-stage">
         <div className="watch-stage-topline"><span>{searchCategory === 'music' ? 'LISTEN TOGETHER' : 'WATCH TOGETHER'}</span>{hasVideo && session && <span className={`watch-playback-state is-${session.playback_state}`}><i />{playbackCopy(session.playback_state)}</span>}</div>
         {hasVideo && session ? <div className="watch-player-card comic-card card-paper">
-          <YouTubePlayer ref={playerRef} session={session} onIntent={handleIntent} onAutoplayBlocked={setAutoplayBlocked} onError={setPlayerError} />
+          <WatchPlayerErrorBoundary key={`${session.media_id}:${playerAttempt}`} fallback={<div className="watch-empty-stage" role="alert"><Tv size={35} /><p>The player hit a snag.</p><small>Try loading it again. Your shared video choice is still saved.</small><button type="button" className="animated-button tone-yellow" onClick={() => setPlayerAttempt((current) => current + 1)}>RETRY PLAYER</button></div>}>
+            <YouTubePlayer ref={playerRef} session={session} onIntent={handleIntent} onAutoplayBlocked={setAutoplayBlocked} onError={setPlayerError} />
+          </WatchPlayerErrorBoundary>
           <div className="watch-player-actions">
             <button type="button" onClick={() => playerRef.current?.seekBy(-10)}><ChevronLeft size={19} />10 SEC</button>
             <button type="button" onClick={() => playerRef.current?.seekBy(10)}>10 SEC<ChevronRight size={19} /></button>

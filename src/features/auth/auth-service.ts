@@ -35,14 +35,19 @@ export async function signInWithPassword(email: string, password: string) {
 }
 
 export async function getProfileById(userId: string) {
-  const { data: coreData, error: coreError } = await supabase.from('profiles').select('id, display_name, avatar_url, created_at, updated_at').eq('id', userId).maybeSingle()
-  if (coreError) throw coreError
-  if (!coreData) return null
-  let pronounSet: PronounSet = 'they_them'
-  const { data: pronounData, error: pronounError } = await supabase.from('profiles').select('pronoun_set').eq('id', userId).maybeSingle()
-  if (pronounError && !isMissingPronounColumn(pronounError)) throw pronounError
-  if (pronounData) pronounSet = asPronounSet((pronounData as { pronoun_set: string | null }).pronoun_set)
-  return { ...(coreData as CoreProfile), pronoun_set: pronounSet } as Profile
+  const fullProfile = await supabase.from('profiles').select('id, display_name, avatar_url, created_at, updated_at, pronoun_set').eq('id', userId).maybeSingle()
+  if (!fullProfile.error) {
+    if (!fullProfile.data) return null
+    return { ...(fullProfile.data as CoreProfile), pronoun_set: asPronounSet((fullProfile.data as { pronoun_set: string | null }).pronoun_set) } as Profile
+  }
+  if (!isMissingPronounColumn(fullProfile.error)) throw fullProfile.error
+
+  // Keep existing installations usable while their database cache catches up
+  // with the pronoun migration, without making every normal profile read do
+  // two round trips.
+  const fallback = await supabase.from('profiles').select('id, display_name, avatar_url, created_at, updated_at').eq('id', userId).maybeSingle()
+  if (fallback.error) throw fallback.error
+  return fallback.data ? { ...(fallback.data as CoreProfile), pronoun_set: 'they_them' } as Profile : null
 }
 
 export async function getMyProfile(userId: string) {

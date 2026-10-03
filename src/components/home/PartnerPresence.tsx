@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { DoorOpen, Phone, Send } from 'lucide-react'
+import { DoorOpen, Phone } from 'lucide-react'
 import { useState } from 'react'
 import { presenceCopy } from '../../features/presence/presence-copy'
 import type { PartnerPresenceStatus } from '../../features/presence/presence-types'
@@ -20,7 +20,7 @@ export function PartnerPresence({ status = 'unknown', compact = false, name = 'M
     </button>
     <AnimatePresence>{open && <motion.div className="presence-popover" role="dialog" aria-label={`${name}'s presence details`} {...popover}>
       <div className="presence-popover-head"><span className="popover-avatar">{initial}</span><span><b>{name}</b><small>{statusCopy}</small></span></div>
-      <div className="presence-actions">{status === 'in_room' && onJoin ? <button type="button" onClick={onJoin}><DoorOpen size={13} /> Join</button> : <button type="button" onClick={onCall}><Phone size={13} /> Call</button>}<button type="button"><Send size={13} /> Poke</button></div>
+      <div className="presence-actions">{status === 'in_room' && onJoin ? <button type="button" onClick={onJoin}><DoorOpen size={13} /> Join</button> : onCall ? <button type="button" onClick={onCall}><Phone size={13} /> Call</button> : null}</div>
     </motion.div>}</AnimatePresence>
   </div>
 }
