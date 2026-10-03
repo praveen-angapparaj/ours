@@ -16,7 +16,7 @@ export function CallOverlays() {
   const outgoingVideo = (state.status === 'outgoing-ringing' || state.status === 'accepting') && state.call.call_type === 'video';
 
   useEffect(() => {
-    if (isLiveCallState(state) && location.pathname !== '/room') {
+    if (isLiveCallState(state) && location.pathname !== '/room' && location.pathname !== '/watch') {
       navigate('/room', { replace: true });
     }
   }, [location.pathname, navigate, state]);

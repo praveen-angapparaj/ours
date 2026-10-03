@@ -8,8 +8,8 @@ Pushing this repository deploys the Vite site to Vercel, including the SPA route
 
 Before testing calls or Watch Something after this revision:
 
-1. Apply every migration in `supabase/migrations` to the linked Supabase project, in filename order. The current Watch Together migration is `20261003000004_phase6_watch_together.sql`; it creates the RLS-protected session, atomic RPCs, and Realtime publication.
-2. Deploy `supabase/functions/livekit-token` and `supabase/functions/youtube-search`.
+1. Apply every migration in `supabase/migrations` to the linked Supabase project, in filename order. `20261003000004_phase6_watch_together.sql` creates the synchronized player; `20261003000005_watch_chat_broadcast.sql` authorizes ephemeral private Watch chat. In **Realtime Settings**, keep **Allow public access** disabled so chat authorization is enforced.
+2. Deploy `supabase/functions/livekit-token` and `supabase/functions/youtube-search`. The latter now supports the music-only Watch search mode.
 3. Set these Edge Function secrets in Supabase:
    - `LIVEKIT_URL` — the production `wss://…` LiveKit endpoint.
    - `LIVEKIT_API_KEY`

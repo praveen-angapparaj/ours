@@ -7,6 +7,8 @@ export type YouTubeSearchResult = {
   thumbnail: string
 }
 
+export type YouTubeSearchCategory = 'video' | 'music'
+
 function isSearchResult(value: unknown): value is YouTubeSearchResult {
   if (!value || typeof value !== 'object') return false
   const result = value as Record<string, unknown>
@@ -17,8 +19,8 @@ function isSearchResult(value: unknown): value is YouTubeSearchResult {
     && typeof result.thumbnail === 'string'
 }
 
-export async function searchYouTube(query: string) {
-  const { data, error } = await supabase.functions.invoke('youtube-search', { body: { query } })
+export async function searchYouTube(query: string, category: YouTubeSearchCategory = 'video') {
+  const { data, error } = await supabase.functions.invoke('youtube-search', { body: { query, category } })
   if (error) throw new Error(error.message)
   if (data?.error) throw new Error(String(data.error))
   if (!Array.isArray(data?.results)) throw new Error('youtube_search_response_invalid')

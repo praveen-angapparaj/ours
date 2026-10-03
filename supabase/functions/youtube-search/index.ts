@@ -31,8 +31,14 @@ serve(async (req) => {
     const query = typeof body === 'object' && body !== null && 'query' in body
       ? (body as { query?: unknown }).query
       : undefined;
+    const category = typeof body === 'object' && body !== null && 'category' in body
+      ? (body as { category?: unknown }).category
+      : 'video';
     if (typeof query !== 'string' || query.trim().length < 2 || query.trim().length > 100) {
       return json({ error: 'Enter between 2 and 100 characters to search.' }, 400);
+    }
+    if (category !== 'video' && category !== 'music') {
+      return json({ error: 'Choose either video or music search.' }, 400);
     }
 
     const authorization = req.headers.get('Authorization');
@@ -61,7 +67,7 @@ serve(async (req) => {
     const apiKey = Deno.env.get('YOUTUBE_API_KEY');
     if (!apiKey) throw new Error('YouTube search is not configured on the server');
     const apiUrl = new URL('https://www.googleapis.com/youtube/v3/search');
-    apiUrl.search = new URLSearchParams({
+    const searchParams = new URLSearchParams({
       key: apiKey,
       part: 'snippet',
       type: 'video',
@@ -70,7 +76,9 @@ serve(async (req) => {
       safeSearch: 'moderate',
       maxResults: '8',
       q: query.trim(),
-    }).toString();
+    });
+    if (category === 'music') searchParams.set('videoCategoryId', '10');
+    apiUrl.search = searchParams.toString();
 
     const response = await fetch(apiUrl);
     const payload: unknown = await response.json();
