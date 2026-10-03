@@ -47,6 +47,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   const sessionRef = useRef<WatchSession | null>(null)
   const mutationQueueRef = useRef<Promise<unknown>>(Promise.resolve())
   const syncChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const realtimeReady = Boolean(authSession?.access_token)
 
   const acceptSession = useCallback((next: WatchSession) => {
     const current = sessionRef.current
@@ -66,7 +67,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       if (mountedRef.current) setError(friendlyWatchError(requestError))
       throw requestError
     }
-  }, [acceptSession, couple, pairingState, user])
+  }, [acceptSession, couple?.id, pairingState, user?.id])
 
   useEffect(() => {
     mountedRef.current = true
@@ -84,7 +85,8 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false
-    setLoading(true)
+    const needsHydration = sessionRef.current?.couple_id !== couple.id
+    if (needsHydration) setLoading(true)
     setError(null)
     void getWatchSession()
       .then((next) => {
@@ -94,14 +96,13 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       .catch((requestError) => {
         if (!cancelled) setError(friendlyWatchError(requestError))
       })
-      .finally(() => { if (!cancelled) setLoading(false) })
+      .finally(() => { if (!cancelled && needsHydration) setLoading(false) })
 
     return () => { cancelled = true }
-  }, [acceptSession, couple, pairingState, user])
+  }, [acceptSession, couple?.id, pairingState, user?.id])
 
   useEffect(() => {
-    if (!user || !couple || pairingState !== 'paired' || !authSession?.access_token) return
-    supabase.realtime.setAuth(authSession.access_token)
+    if (!user || !couple || pairingState !== 'paired' || !realtimeReady) return
     let disposed = false
     const channel = supabase
       // Postgres Changes is protected by the watch_sessions SELECT policy. This
@@ -126,14 +127,13 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     })
 
     return () => { disposed = true; void supabase.removeChannel(channel) }
-  }, [acceptSession, authSession?.access_token, couple, pairingState, refresh, user])
+  }, [acceptSession, couple?.id, pairingState, realtimeReady, refresh, user?.id])
 
   // Postgres Changes remains the durable source of truth. This private
   // Broadcast channel carries the confirmed session to the other screen as
   // soon as the RPC returns, avoiding replication delay for play/pause/seek.
   useEffect(() => {
-    if (!user || !couple || pairingState !== 'paired' || !authSession?.access_token) return
-    supabase.realtime.setAuth(authSession.access_token)
+    if (!user || !couple || pairingState !== 'paired' || !realtimeReady) return
     const channel = supabase
       .channel(`couple:${couple.id}:watch-sync`, { config: { private: true, broadcast: { self: false, ack: false } } })
       .on<WatchSyncPayload>('broadcast', { event: 'watch-session' }, ({ payload }) => {
@@ -147,15 +147,18 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       if (syncChannelRef.current === channel) syncChannelRef.current = null
       void supabase.removeChannel(channel)
     }
-  }, [acceptSession, authSession?.access_token, couple, pairingState, user])
+  }, [acceptSession, couple?.id, pairingState, realtimeReady, user?.id])
 
   useEffect(() => {
     if (!user || !couple || pairingState !== 'paired') return
     const refreshOnVisible = () => { if (document.visibilityState === 'visible') void refresh().catch(() => undefined) }
+    const refreshOnPageShow = (event: PageTransitionEvent) => { if (event.persisted) refreshOnVisible() }
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh().catch(() => undefined) }, 45_000)
     document.addEventListener('visibilitychange', refreshOnVisible)
-    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refreshOnVisible) }
-  }, [couple, pairingState, refresh, user])
+    window.addEventListener('online', refreshOnVisible)
+    window.addEventListener('pageshow', refreshOnPageShow)
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refreshOnVisible); window.removeEventListener('online', refreshOnVisible); window.removeEventListener('pageshow', refreshOnPageShow) }
+  }, [couple?.id, pairingState, refresh, user?.id])
 
   const queueMutation = useCallback((mutation: WatchMutation) => {
     const execute = async () => {
@@ -177,7 +180,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     const task = mutationQueueRef.current.catch(() => undefined).then(execute)
     mutationQueueRef.current = task.catch(() => undefined)
     return task
-  }, [acceptSession, couple, pairingState, user])
+  }, [acceptSession, couple?.id, pairingState, user?.id])
 
   const setVideo = useCallback((mediaId: string) => queueMutation({ provider: 'youtube', mediaId, playbackState: 'paused', positionSeconds: 0 }), [queueMutation])
   const setPlayback = useCallback((playbackState: Exclude<WatchMutation['playbackState'], 'empty'>, positionSeconds: number) => {

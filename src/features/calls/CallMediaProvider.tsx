@@ -22,7 +22,9 @@ export function CallMediaProvider({ children }: { children: ReactNode }) {
     audio={false}
     video={false}
     options={{
-      disconnectOnPageLeave: true,
+      // Closing a document will naturally close its socket. Opting out here
+      // avoids intentionally ending a healthy room during page lifecycle / BFCache handling.
+      disconnectOnPageLeave: false,
       stopLocalTrackOnUnpublish: true,
       adaptiveStream: true,
       dynacast: true,

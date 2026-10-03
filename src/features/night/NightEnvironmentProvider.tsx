@@ -41,9 +41,16 @@ function deriveVisualState(call: CallRuntimeState, watch: WatchNightActivity, re
 export function NightEnvironmentProvider({ children }: { children: ReactNode }) {
   const { state: callState } = useCall()
   const reducedMotion = useReducedMotion()
+  const [pageVisible, setPageVisible] = useState(() => document.visibilityState === 'visible')
   const [remoteCameraActive, setRemoteCameraActive] = useState(false)
   const [watchActivity, setWatchActivity] = useState<WatchNightActivity>(emptyWatchActivity)
-  const visualState = useMemo(() => deriveVisualState(callState, watchActivity, remoteCameraActive, reducedMotion), [callState, reducedMotion, remoteCameraActive, watchActivity])
+  const visualState = useMemo(() => deriveVisualState(callState, watchActivity, remoteCameraActive, reducedMotion || !pageVisible), [callState, pageVisible, reducedMotion, remoteCameraActive, watchActivity])
+
+  useEffect(() => {
+    const syncVisibility = () => setPageVisible(document.visibilityState === 'visible')
+    document.addEventListener('visibilitychange', syncVisibility)
+    return () => document.removeEventListener('visibilitychange', syncVisibility)
+  }, [])
 
   useEffect(() => {
     if (!isLiveCallState(callState) || callState.call.call_type !== 'video') setRemoteCameraActive(false)

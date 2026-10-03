@@ -73,6 +73,9 @@ function disconnectMessage(reason?: DisconnectReason) {
 export function CallProvider({ children }: { children: ReactNode }) {
   const { user, session } = useAuth()
   const { couple } = useCouple()
+  const userId = user?.id
+  const coupleId = couple?.id
+  const realtimeReady = Boolean(session?.access_token)
   const [state, setState] = useState<CallRuntimeState>({ status: 'idle' })
   const [notice, setNotice] = useState<string | null>(null)
   const stateRef = useRef(state)
@@ -95,11 +98,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
   useEffect(() => () => window.clearTimeout(noticeTimerRef.current), [])
 
   const applyCallUpdate = useCallback((call: Call) => {
-    if (!user || call.couple_id !== couple?.id || (call.caller_id !== user.id && call.callee_id !== user.id)) return
+    if (!userId || call.couple_id !== coupleId || (call.caller_id !== userId && call.callee_id !== userId)) return
 
     const currentCall = callFromState(stateRef.current)
     if (terminalStatuses.has(call.status) && currentCall?.id === call.id) {
-      notify(terminalMessage(call, user.id))
+      notify(terminalMessage(call, userId))
     }
 
     setState((current) => {
@@ -120,12 +123,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
       // A late ringing event must not tear down a room that has already accepted.
       if (current.status === 'connecting' || current.status === 'connected') return current
-      return stateForCall(call, user.id)
+      return stateForCall(call, userId)
     })
-  }, [couple?.id, notify, user])
+  }, [coupleId, notify, userId])
 
   const reconcileActiveCall = useCallback(async () => {
-    if (!user || !couple) return
+    if (!userId || !coupleId) return
     const callIdAtRequestStart = callFromState(stateRef.current)?.id ?? null
     const call = await getActiveCall()
     if (call) {
@@ -139,10 +142,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setState((current) => callIdAtRequestStart && callFromState(current)?.id === callIdAtRequestStart
       ? { status: 'idle' }
       : current)
-  }, [applyCallUpdate, couple, user])
+  }, [applyCallUpdate, coupleId, userId])
 
   useEffect(() => {
-    if (!user || !couple) {
+    if (!userId || !coupleId) {
       tokenRequestRef.current = null
       setState({ status: 'idle' })
       return
@@ -161,27 +164,26 @@ export function CallProvider({ children }: { children: ReactNode }) {
     })()
 
     return () => { disposed = true }
-  }, [couple?.id, notify, reconcileActiveCall, user?.id])
+  }, [coupleId, notify, reconcileActiveCall, userId])
 
   useEffect(() => {
     if (session?.access_token) supabase.realtime.setAuth(session.access_token)
   }, [session?.access_token])
 
   useEffect(() => {
-    if (!user || !couple || !session?.access_token) return
-    supabase.realtime.setAuth(session.access_token)
+    if (!userId || !coupleId || !realtimeReady) return
     let disposed = false
     const sync = () => {
       void reconcileActiveCall().catch((error) => {
         if (!disposed) notify(asMessage(error))
       })
     }
-    const channel = supabase.channel(`calls:${couple.id}`)
+    const channel = supabase.channel(`calls:${coupleId}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'calls',
-        filter: `couple_id=eq.${couple.id}`,
+        filter: `couple_id=eq.${coupleId}`,
       }, (payload) => {
         if (payload.eventType !== 'DELETE') applyCallUpdate(payload.new as Call)
       })
@@ -194,10 +196,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
       disposed = true
       void supabase.removeChannel(channel)
     }
-  }, [applyCallUpdate, couple?.id, notify, reconcileActiveCall, session?.access_token, user?.id])
+  }, [applyCallUpdate, coupleId, notify, reconcileActiveCall, realtimeReady, userId])
 
   useEffect(() => {
-    if (!user || !couple || !callFromState(state)) return
+    if (!userId || !coupleId || !callFromState(state)) return
     let disposed = false
     const sync = () => {
       void reconcileActiveCall().catch((error) => {
@@ -208,13 +210,18 @@ export function CallProvider({ children }: { children: ReactNode }) {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') sync()
     }
+    const onPageShow = (event: PageTransitionEvent) => { if (event.persisted) sync() }
     document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('online', sync)
+    window.addEventListener('pageshow', onPageShow)
     return () => {
       disposed = true
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('online', sync)
+      window.removeEventListener('pageshow', onPageShow)
     }
-  }, [couple?.id, notify, reconcileActiveCall, state.status, user?.id])
+  }, [coupleId, notify, reconcileActiveCall, state.status, userId])
 
   useEffect(() => {
     if (state.status !== 'outgoing-ringing' && state.status !== 'incoming-ringing') return

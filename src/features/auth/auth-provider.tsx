@@ -21,6 +21,14 @@ type AuthContextValue = {
 
 export const AuthContext = createContext<AuthContextValue | null>(null)
 
+function retainStableUser(previous: Session | null, next: Session | null, event?: string) {
+  if (!previous || !next || event === 'USER_UPDATED' || previous.user.id !== next.user.id) return next
+  // Supabase replaces the session (and user object) during TOKEN_REFRESHED.
+  // Keep the user reference stable so downstream providers do not mistake a
+  // routine token rotation for a new application session.
+  return { ...next, user: previous.user }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -42,15 +50,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user])
   const initialize = useCallback(async () => {
     if (supabaseConfigError) { setLoading(false); return }
-    setLoading(true); setError(null)
+    setError(null)
     const { data, error: sessionError } = await supabase.auth.getSession()
     if (sessionError) setError(friendlyAuthError(sessionError))
-    setSession(data.session)
+    setSession((current) => retainStableUser(current, data.session))
     setLoading(false)
   }, [])
   useEffect(() => {
     void initialize()
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => { setSession(nextSession); setLoading(false) })
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession((current) => retainStableUser(current, nextSession, event))
+      // The initial session is the only auth event allowed to control the
+      // full-screen hydration gate. TOKEN_REFRESHED must be invisible.
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') setLoading(false)
+    })
     return () => subscription.subscription.unsubscribe()
   }, [initialize])
   useEffect(() => { if (!user) { setProfile(null); return }; void refreshProfile().catch((profileError: Error) => setError(friendlyAuthError(profileError))) }, [user, refreshProfile])

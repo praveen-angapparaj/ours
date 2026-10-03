@@ -1,7 +1,9 @@
-import { lazy, Suspense, type ReactNode } from 'react'
-import { Route, Routes } from 'react-router-dom'
+import { lazy, Suspense, useCallback, useEffect, type ReactNode } from 'react'
+import { Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider } from './features/auth/auth-provider'
+import { useAuth } from './features/auth/use-auth'
 import { CoupleProvider } from './features/couple/couple-provider'
+import { useCouple } from './features/couple/use-couple'
 import { CouplePresenceProvider } from './features/presence/presence-provider'
 import { CallProvider } from './features/calls/CallProvider'
 import { NightEnvironmentProvider } from './features/night/NightEnvironmentProvider'
@@ -38,9 +40,46 @@ function CallMediaBoundary({ children }: { children: ReactNode }) {
   return <Suspense fallback={<AppLoader message="keeping the call connected..." />}><CallMediaProvider>{children}</CallMediaProvider></Suspense>
 }
 
+// A small per-tab recovery hint for an actual browser discard. BrowserRouter
+// already preserves the URL; this records enough context to validate and
+// silently recover live state without ever persisting credentials or media.
+function ContinuitySnapshot() {
+  const location = useLocation()
+  const { user, loading } = useAuth()
+  const { couple, state: pairingState } = useCouple()
+  const { state: callState } = useCall()
+  const persist = useCallback(() => {
+    if (loading) return
+    try {
+      if (!user) { window.sessionStorage.removeItem('our-space:continuity:v1'); return }
+      const activeCallId = 'call' in callState ? callState.call.id : null
+      window.sessionStorage.setItem('our-space:continuity:v1', JSON.stringify({
+        version: 1,
+        route: location.pathname,
+        activeFeature: location.pathname === '/watch' ? 'watch' : activeCallId ? 'call' : 'app',
+        coupleId: couple?.id ?? null,
+        activeCallId,
+        pairingState,
+        updatedAt: Date.now(),
+      }))
+    } catch {
+      // Storage can be unavailable in privacy modes. Live continuity still works.
+    }
+  }, [callState, couple?.id, loading, location.pathname, pairingState, user])
+
+  useEffect(() => {
+    persist()
+    window.addEventListener('pagehide', persist)
+    return () => window.removeEventListener('pagehide', persist)
+  }, [persist])
+
+  return null
+}
+
 export function AuthenticatedApp() {
   return <AuthProvider><CoupleProvider><CouplePresenceProvider><CallProvider>
     <NightEnvironmentProvider>
+      <ContinuitySnapshot />
       <CallMediaBoundary>
         <Routes>
           <Route path="/auth" element={<AuthRoute><ScreenLoader><AuthScreen key="signup" mode="signup" /></ScreenLoader></AuthRoute>} />

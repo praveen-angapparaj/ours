@@ -43,6 +43,9 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
   }, [])
 
   const emitIntent = useCallback((state: Exclude<WatchPlaybackState, 'empty'>, player: YouTubeIframePlayer) => {
+    // Browsers and embedded players can pause media when a tab is hidden. That
+    // is local lifecycle behavior, not a shared "pause together" command.
+    if (document.visibilityState !== 'visible') return
     const position = boundedTime(player, player.getCurrentTime())
     const canonical = latestSessionRef.current
     const expected = boundedTime(player, expectedWatchPosition(canonical))
@@ -142,6 +145,17 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
     if (!ready) return
     applyCanonical(session)
   }, [applyCanonical, ready, session])
+
+  useEffect(() => {
+    if (!ready) return
+    const recoverVisiblePlayer = () => {
+      if (document.visibilityState === 'visible') applyCanonical(latestSessionRef.current, true)
+    }
+    const onPageShow = (event: PageTransitionEvent) => { if (event.persisted) recoverVisiblePlayer() }
+    document.addEventListener('visibilitychange', recoverVisiblePlayer)
+    window.addEventListener('pageshow', onPageShow)
+    return () => { document.removeEventListener('visibilitychange', recoverVisiblePlayer); window.removeEventListener('pageshow', onPageShow) }
+  }, [applyCanonical, ready])
 
   useEffect(() => {
     if (!ready) return
