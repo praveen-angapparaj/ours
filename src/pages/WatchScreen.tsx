@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useCouple } from '../features/couple/use-couple'
 import { WatchCallPanel } from '../features/watch/WatchCallPanel'
 import { YouTubePlayer, type YouTubePlayerHandle } from '../features/watch/YouTubePlayer'
+import { YouTubeSearch } from '../features/watch/YouTubeSearch'
 import { parseYouTubeUrl } from '../features/watch/youtube'
 import { useWatch } from '../features/watch/use-watch'
 
@@ -30,20 +31,24 @@ export function WatchScreen() {
     if (session?.playback_state !== 'playing') setAutoplayBlocked(false)
   }, [session?.playback_state, session?.state_version])
 
-  const submitVideo = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const parsed = parseYouTubeUrl(url)
-    if (!parsed.mediaId) { setUrlError(parsed.error); return }
+  const chooseVideo = useCallback(async (mediaId: string) => {
     setUrlError(null)
     setPlayerError(null)
     try {
-      await setVideo(parsed.mediaId)
+      await setVideo(mediaId)
       setUrl('')
       setChangeOpen(false)
     } catch {
       // The provider exposes the friendly server error in the shared banner.
     }
-  }, [setVideo, url])
+  }, [setVideo])
+
+  const submitVideo = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const parsed = parseYouTubeUrl(url)
+    if (!parsed.mediaId) { setUrlError(parsed.error); return }
+    await chooseVideo(parsed.mediaId)
+  }, [chooseVideo, url])
 
   const handleIntent = useCallback((state: 'paused' | 'playing' | 'ended', positionSeconds: number) => {
     setPlayerError(null)
@@ -76,6 +81,7 @@ export function WatchScreen() {
         <input id="youtube-url" value={url} onChange={(event) => { setUrl(event.target.value); setUrlError(null); clearError() }} placeholder="https://youtu.be/..." inputMode="url" autoComplete="url" />
         <button className="animated-button tone-coral" type="submit" disabled={saving}>{saving ? 'ADDING...' : 'WATCH THIS'}</button>
       </form>
+      <YouTubeSearch onSelect={(mediaId) => void chooseVideo(mediaId)} disabled={saving} />
       <small>Works with watch, short, share, and embed links. The video still has to allow embedding.</small>
     </section> : <section className="watch-room">
       <div className="watch-player-card comic-card card-paper">
@@ -94,6 +100,7 @@ export function WatchScreen() {
         <label htmlFor="youtube-url-change">A different YouTube link</label>
         <input id="youtube-url-change" value={url} onChange={(event) => { setUrl(event.target.value); setUrlError(null); clearError() }} placeholder="https://www.youtube.com/watch?v=..." inputMode="url" autoComplete="url" autoFocus />
         <button className="animated-button tone-yellow" type="submit" disabled={saving}>{saving ? 'SAVING...' : 'SWAP VIDEO'}</button>
+        <YouTubeSearch onSelect={(mediaId) => void chooseVideo(mediaId)} disabled={saving} />
       </form>}
 
       <WatchCallPanel />

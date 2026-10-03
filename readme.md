@@ -9,11 +9,12 @@ Pushing this repository deploys the Vite site to Vercel, including the SPA route
 Before testing calls or Watch Something after this revision:
 
 1. Apply every migration in `supabase/migrations` to the linked Supabase project, in filename order. The current Watch Together migration is `20261003000004_phase6_watch_together.sql`; it creates the RLS-protected session, atomic RPCs, and Realtime publication.
-2. Deploy `supabase/functions/livekit-token`.
+2. Deploy `supabase/functions/livekit-token` and `supabase/functions/youtube-search`.
 3. Set these Edge Function secrets in Supabase:
    - `LIVEKIT_URL` — the production `wss://…` LiveKit endpoint.
    - `LIVEKIT_API_KEY`
    - `LIVEKIT_API_SECRET`
+   - `YOUTUBE_API_KEY` — an enabled YouTube Data API v3 key, stored only as a Supabase secret.
 4. Confirm the Vercel project has deployed the current `main` commit and test its normal HTTPS URL, not a preview URL that has expired.
 
 For a CLI-based Supabase deployment after linking the project:
@@ -21,7 +22,8 @@ For a CLI-based Supabase deployment after linking the project:
 ```powershell
 supabase db push
 supabase functions deploy livekit-token
-supabase secrets set LIVEKIT_URL="wss://your-project.livekit.cloud" LIVEKIT_API_KEY="..." LIVEKIT_API_SECRET="..."
+supabase functions deploy youtube-search
+supabase secrets set LIVEKIT_URL="wss://your-project.livekit.cloud" LIVEKIT_API_KEY="..." LIVEKIT_API_SECRET="..." YOUTUBE_API_KEY="..."
 ```
 
 Use two different paired accounts when testing. The same account on a laptop and phone intentionally disconnects its earlier LiveKit session.
