@@ -49,7 +49,7 @@ export function WatchScreen() {
 
   if (loading && !session) return <main className="watch-page page-shell"><section className="watch-loading comic-card card-blue"><LoaderCircle className="watch-spinner" /><p className="eyebrow">watch something</p><h1>finding the remote...</h1></section></main>
 
-  return <main className={`watch-page page-shell${session?.playback_state === 'playing' ? ' is-playing' : ''}`}>
+  return <main className="watch-page page-shell">
     <header className="watch-header">
       <button className="back-button" onClick={() => navigate('/home')}><ArrowLeft size={18} /> <span>back to our mess</span></button>
       <div className="watch-title"><Tv size={16} /><span>watch something</span></div>
