@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useCall } from './use-call'
 import { isLiveCallState } from './types'
+import { NightRemoteMediaBridge } from '../night/NightRemoteMediaBridge'
 
 // The LiveKit room belongs to the active call, not to the /room page. Keeping
 // it here lets audio/video continue while a paired couple visits /watch.
@@ -32,6 +33,7 @@ export function CallMediaProvider({ children }: { children: ReactNode }) {
     onDisconnected={(reason) => reportRoomDisconnected(call.id, attempt, reason)}
   >
     <RoomAudioRenderer />
+    <NightRemoteMediaBridge />
     {children}
   </LiveKitRoom>
 }

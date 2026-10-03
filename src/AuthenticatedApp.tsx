@@ -4,6 +4,7 @@ import { AuthProvider } from './features/auth/auth-provider'
 import { CoupleProvider } from './features/couple/couple-provider'
 import { CouplePresenceProvider } from './features/presence/presence-provider'
 import { CallProvider } from './features/calls/CallProvider'
+import { NightEnvironmentProvider } from './features/night/NightEnvironmentProvider'
 import { useCall } from './features/calls/use-call'
 import { isLiveCallState } from './features/calls/types'
 import { WatchProvider } from './features/watch/WatchProvider'
@@ -39,18 +40,20 @@ function CallMediaBoundary({ children }: { children: ReactNode }) {
 
 export function AuthenticatedApp() {
   return <AuthProvider><CoupleProvider><CouplePresenceProvider><CallProvider>
-    <CallMediaBoundary>
-      <Routes>
-        <Route path="/auth" element={<AuthRoute><ScreenLoader><AuthScreen key="signup" mode="signup" /></ScreenLoader></AuthRoute>} />
-        <Route path="/auth/signup" element={<AuthRoute><ScreenLoader><AuthScreen key="signup" mode="signup" /></ScreenLoader></AuthRoute>} />
-        <Route path="/auth/signin" element={<AuthRoute><ScreenLoader><AuthScreen key="signin" mode="signin" /></ScreenLoader></AuthRoute>} />
-        <Route path="/pair" element={<PairingRoute><ScreenLoader><PairingScreen /></ScreenLoader></PairingRoute>} />
-        <Route path="/home" element={<ProtectedRoute><ScreenLoader><HomeScreen /></ScreenLoader></ProtectedRoute>} />
-        <Route path="/room" element={<ProtectedRoute><Suspense fallback={<AppLoader message="setting up the room..." />}><RoomScreen /></Suspense></ProtectedRoute>} />
-        <Route path="/watch" element={<ProtectedRoute><WatchProvider><Suspense fallback={<AppLoader message="warming up the shared television..." />}><WatchScreen /></Suspense></WatchProvider></ProtectedRoute>} />
-        <Route path="*" element={<ScreenLoader><LandingScreen /></ScreenLoader>} />
-      </Routes>
-      <CallOverlayBoundary />
-    </CallMediaBoundary>
+    <NightEnvironmentProvider>
+      <CallMediaBoundary>
+        <Routes>
+          <Route path="/auth" element={<AuthRoute><ScreenLoader><AuthScreen key="signup" mode="signup" /></ScreenLoader></AuthRoute>} />
+          <Route path="/auth/signup" element={<AuthRoute><ScreenLoader><AuthScreen key="signup" mode="signup" /></ScreenLoader></AuthRoute>} />
+          <Route path="/auth/signin" element={<AuthRoute><ScreenLoader><AuthScreen key="signin" mode="signin" /></ScreenLoader></AuthRoute>} />
+          <Route path="/pair" element={<PairingRoute><ScreenLoader><PairingScreen /></ScreenLoader></PairingRoute>} />
+          <Route path="/home" element={<ProtectedRoute><ScreenLoader><HomeScreen /></ScreenLoader></ProtectedRoute>} />
+          <Route path="/room" element={<ProtectedRoute><Suspense fallback={<AppLoader message="setting up the room..." />}><RoomScreen /></Suspense></ProtectedRoute>} />
+          <Route path="/watch" element={<ProtectedRoute><WatchProvider><Suspense fallback={<AppLoader message="warming up the shared television..." />}><WatchScreen /></Suspense></WatchProvider></ProtectedRoute>} />
+          <Route path="*" element={<ScreenLoader><LandingScreen /></ScreenLoader>} />
+        </Routes>
+        <CallOverlayBoundary />
+      </CallMediaBoundary>
+    </NightEnvironmentProvider>
   </CallProvider></CouplePresenceProvider></CoupleProvider></AuthProvider>
 }

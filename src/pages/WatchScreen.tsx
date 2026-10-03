@@ -7,6 +7,7 @@ import { YouTubePlayer, type YouTubePlayerHandle } from '../features/watch/YouTu
 import { YouTubeSearch } from '../features/watch/YouTubeSearch'
 import type { YouTubeSearchCategory } from '../features/watch/youtube-search-service'
 import { useWatch } from '../features/watch/use-watch'
+import { useNightEnvironment } from '../features/night/NightEnvironmentProvider'
 
 function playbackCopy(state: 'empty' | 'paused' | 'playing' | 'ended') {
   if (state === 'playing') return 'playing together'
@@ -18,6 +19,7 @@ function playbackCopy(state: 'empty' | 'paused' | 'playing' | 'ended') {
 export function WatchScreen() {
   const navigate = useNavigate()
   const { session, loading, saving, error, realtimeState, setVideo, setPlayback, clearVideo, refresh, clearError } = useWatch()
+  const { setWatchActivity } = useNightEnvironment()
   const playerRef = useRef<YouTubePlayerHandle | null>(null)
   const [playerError, setPlayerError] = useState<string | null>(null)
   const [autoplayBlocked, setAutoplayBlocked] = useState(false)
@@ -46,6 +48,11 @@ export function WatchScreen() {
 
   const visibleError = playerError ?? error
   const hasVideo = Boolean(session?.media_id)
+
+  useEffect(() => {
+    setWatchActivity({ active: true, hasMedia: hasVideo, playbackState: session?.playback_state ?? 'empty' })
+    return () => setWatchActivity({ active: false, hasMedia: false, playbackState: 'empty' })
+  }, [hasVideo, session?.playback_state, setWatchActivity])
 
   if (loading && !session) return <main className="watch-page page-shell"><section className="watch-loading comic-card card-blue"><LoaderCircle className="watch-spinner" /><p className="eyebrow">watch together</p><h1>Getting the room ready.</h1></section></main>
 
