@@ -31,12 +31,12 @@ function prefetchCallRooms() {
   void import('../features/calls/LiveVideoCallRoom')
 }
 
-function presenceLine(status: PartnerPresenceStatus, partnerName: string) {
-  if (status === 'in_room') return `${partnerName} is in your space.`
-  if (status === 'online') return `${partnerName} is here too.`
-  if (status === 'away') return `${partnerName} stepped away for a while.`
-  if (status === 'unknown') return 'Reconnecting to your shared space.'
-  return 'The other side is quiet for now.'
+function heroState(status: PartnerPresenceStatus, partnerName: string) {
+  if (status === 'in_room') return { title: partnerName, emphasis: 'is in the room.', copy: 'There is a place waiting for you.' }
+  if (status === 'online') return { title: 'You are', emphasis: 'both here.', copy: `${partnerName} is online in your shared space.` }
+  if (status === 'away') return { title: partnerName, emphasis: 'stepped away.', copy: 'The space is keeping their place.' }
+  if (status === 'unknown') return { title: 'Finding your', emphasis: 'shared space.', copy: 'Presence will update as soon as the connection returns.' }
+  return { title: 'The space', emphasis: 'is quiet.', copy: 'It will be ready when your person returns.' }
 }
 
 export function HomeScreen() {
@@ -57,6 +57,7 @@ export function HomeScreen() {
   const partnerPronouns = pronounsFor(partner?.pronoun_set)
   const partnerInitials = profileInitials(partnerName, 'O')
   const activePresence = partnerStatus === 'online' || partnerStatus === 'in_room'
+  const hero = heroState(partnerStatus, partnerFirstName)
 
   const triggerShake = () => {
     window.clearTimeout(shakeTimer.current)
@@ -92,7 +93,7 @@ export function HomeScreen() {
         <motion.div className={`partner-orbit${activePresence ? ' is-active' : ''}`} initial={{ opacity: 0, scale: .94 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .48, ease: 'easeOut' }}>
           <span className="partner-orbit-track partner-orbit-track-wide" /><span className="partner-orbit-track partner-orbit-track-close" /><span className="partner-orbit-you">Y</span><span className="partner-orbit-them">{partnerInitials}</span><span className="partner-orbit-light" />
         </motion.div>
-        <motion.div className="home-hero-copy" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .1, duration: .35 }}><span className="home-presence-state"><i />{partnerStatus === 'in_room' ? 'IN YOUR SPACE' : activePresence ? 'ONLINE NOW' : partnerStatus.toUpperCase()}</span><h1>{partnerFirstName}<br /><em>is on the other side.</em></h1><p>{presenceLine(partnerStatus, partnerFirstName)}</p></motion.div>
+        <motion.div className="home-hero-copy" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .1, duration: .35 }}><span className="home-presence-state"><i />{partnerStatus === 'in_room' ? 'IN YOUR SPACE' : activePresence ? 'ONLINE NOW' : partnerStatus.toUpperCase()}</span><h1><span>{hero.title}</span><br /><em>{hero.emphasis}</em></h1><p>{hero.copy}</p></motion.div>
       </section>
       <section className="home-actions-zone" aria-label="Ways to spend time together">
         <p className="home-actions-label">WHAT DO YOU FEEL LIKE?</p>
