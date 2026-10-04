@@ -10,7 +10,7 @@ type AnimatedButtonProps = HTMLMotionProps<'button'> & {
 
 export function AnimatedButton({ children, tone = 'paper', className = '', ...props }: AnimatedButtonProps) {
   return (
-    <motion.button {...props} className={`animated-button tone-${tone} ${className}`} whileHover={{ scale: 1.035, rotate: -1.2 }} whileTap={squishTap} transition={spring}>
+    <motion.button {...props} className={`animated-button tone-${tone} ${className}`} whileHover={{ scale: 1.012, y: -1 }} whileTap={squishTap} transition={spring}>
       {children}
     </motion.button>
   )

@@ -10,6 +10,7 @@ import { TogetherCounter } from '../components/home/TogetherCounter'
 import { UserMenu } from '../components/home/UserMenu'
 import { PageTransition } from '../components/PageTransition'
 import { useCouple } from '../features/couple/use-couple'
+import { profileInitials } from '../features/couple/profile-initials'
 import { useCouplePresence } from '../features/presence/use-couple-presence'
 import { useCall } from '../features/calls/use-call'
 import type { CallType } from '../features/calls/types'
@@ -20,16 +21,22 @@ type HangoutAction = { title: string; caption: string; icon: typeof Phone; tone:
 type PresenceToast = { copy: string; join: boolean }
 
 const actions: HangoutAction[] = [
-  { title: 'CALL THEM', caption: 'say hi, be weird', icon: Phone, tone: 'coral', kind: 'call' },
-  { title: 'WATCH SOMETHING', caption: 'argue about the plot', icon: Film, tone: 'yellow', kind: 'watch' },
-  { title: 'PLAY MUSIC', caption: 'DJ privileges pending', icon: Headphones, tone: 'lavender', kind: 'music' },
+  { title: 'CALL', caption: 'hear their voice', icon: Phone, tone: 'coral', kind: 'call' },
+  { title: 'WATCH TOGETHER', caption: 'find a shared distraction', icon: Film, tone: 'yellow', kind: 'watch' },
+  { title: 'LISTEN TOGETHER', caption: 'put something on', icon: Headphones, tone: 'lavender', kind: 'music' },
 ]
 
 function prefetchCallRooms() {
-  // Keep WebRTC out of the initial app bundle, but start downloading it as soon
-  // as a person shows intent to call so the room opens without a second wait.
   void import('../features/calls/LiveAudioCallRoom')
   void import('../features/calls/LiveVideoCallRoom')
+}
+
+function presenceLine(status: PartnerPresenceStatus, partnerName: string) {
+  if (status === 'in_room') return `${partnerName} is in your space.`
+  if (status === 'online') return `${partnerName} is here too.`
+  if (status === 'away') return `${partnerName} stepped away for a while.`
+  if (status === 'unknown') return 'Reconnecting to your shared space.'
+  return 'The other side is quiet for now.'
 }
 
 export function HomeScreen() {
@@ -42,48 +49,60 @@ export function HomeScreen() {
   const [shaking, setShaking] = useState(false)
   const [presenceToast, setPresenceToast] = useState<PresenceToast | null>(null)
   const [callChoiceOpen, setCallChoiceOpen] = useState(false)
-  const noteIndex = useState(() => Math.floor(Math.random() * 3))[0]
   const shakeTimer = useRef<number | undefined>(undefined)
   const toastTimer = useRef<number | undefined>(undefined)
   const previousStatus = useRef<PartnerPresenceStatus | null>(null)
   const partnerName = partner?.display_name ?? 'your person'
+  const partnerFirstName = partnerName.trim().split(/\s+/)[0] || 'your person'
   const partnerPronouns = pronounsFor(partner?.pronoun_set)
-  const notes = [
-    <>today's important agenda:<br /><b>absolutely nothing</b></>,
-    <>{partnerPronouns.subject} owes you one movie btw <b>-&gt;</b></>,
-    <>important reminder:<br /><b>be a little silly</b></>,
-  ]
-  const note = notes[noteIndex]
-  const triggerShake = () => { window.clearTimeout(shakeTimer.current); setShaking(true); shakeTimer.current = window.setTimeout(() => setShaking(false), 330) }
-  const beginCall = (callType: CallType) => { prefetchCallRooms(); setCallChoiceOpen(false); void startCall(callType) }
+  const partnerInitials = profileInitials(partnerName, 'O')
+  const activePresence = partnerStatus === 'online' || partnerStatus === 'in_room'
+
+  const triggerShake = () => {
+    window.clearTimeout(shakeTimer.current)
+    setShaking(true)
+    shakeTimer.current = window.setTimeout(() => setShaking(false), 330)
+  }
+  const beginCall = (callType: CallType) => {
+    prefetchCallRooms()
+    setCallChoiceOpen(false)
+    void startCall(callType)
+  }
+
   useEffect(() => () => { window.clearTimeout(shakeTimer.current); window.clearTimeout(toastTimer.current) }, [])
   useEffect(() => {
     if (!hydrated || !partner) return
     const previous = previousStatus.current
     previousStatus.current = partnerStatus
     if (!previous) return
-    let toast: PresenceToast | null = null
-    if (previous === 'offline' && (partnerStatus === 'online' || partnerStatus === 'in_room')) toast = { copy: `${partnerName} showed up.`, join: partnerStatus === 'in_room' }
-    if (previous === 'online' && partnerStatus === 'in_room') toast = { copy: `${partnerName} went to the room.`, join: true }
-    if (!toast) return
+    const arrived = previous === 'offline' && (partnerStatus === 'online' || partnerStatus === 'in_room')
+    const entered = previous === 'online' && partnerStatus === 'in_room'
+    if (!arrived && !entered) return
     window.clearTimeout(toastTimer.current)
-    setPresenceToast(toast)
+    setPresenceToast({ copy: entered ? `${partnerFirstName} entered your space.` : `${partnerFirstName} is here.`, join: partnerStatus === 'in_room' })
     toastTimer.current = window.setTimeout(() => setPresenceToast(null), 2800)
-  }, [hydrated, partner, partnerName, partnerStatus])
-  return <main className={`home page-shell ${shaking ? 'screen-shake' : ''}`}>
+  }, [hydrated, partner, partnerFirstName, partnerStatus])
+
+  return <main className={`home home-signature page-shell presence-${partnerStatus}${shaking ? ' screen-shake' : ''}`}>
+    <div className="home-sky" aria-hidden="true"><i className="home-orbit-ring home-orbit-ring-one" /><i className="home-orbit-ring home-orbit-ring-two" /><i className="home-star home-star-one" /><i className="home-star home-star-two" /><i className="home-star home-star-three" /></div>
     <header className="app-header"><button className="wordmark" onClick={() => navigate('/home')} aria-label="Return to home">our space<span>TM</span></button><div className="header-people"><UserMenu /><PartnerPresence status={partnerStatus} name={partnerName} onJoin={() => navigate('/room')} onCall={() => { prefetchCallRooms(); void startCall() }} /></div></header>
-    <div className="home-layout">
-      <motion.section className="home-intro" initial={{ opacity: 0, y: 9 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .26 }}>
-        <div className="paper-note">{note}</div>
-        <p className="eyebrow">your very private corner of the web</p>
-        <h1>Wanna<br /><em>hang out?</em></h1>
-        <p className="home-copy">Your favourite tiny person is one button away. That seems suspiciously convenient.</p>
+    <section className="home-orbit-layout">
+      <section className="home-presence-hero" aria-label={`${partnerName}'s presence`}>
+        <p className="eyebrow">YOUR SHARED ORBIT</p>
+        <motion.div className={`partner-orbit${activePresence ? ' is-active' : ''}`} initial={{ opacity: 0, scale: .94 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .48, ease: 'easeOut' }}>
+          <span className="partner-orbit-track partner-orbit-track-wide" /><span className="partner-orbit-track partner-orbit-track-close" /><span className="partner-orbit-you">Y</span><span className="partner-orbit-them">{partnerInitials}</span><span className="partner-orbit-light" />
+        </motion.div>
+        <motion.div className="home-hero-copy" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .1, duration: .35 }}><span className="home-presence-state"><i />{partnerStatus === 'in_room' ? 'IN YOUR SPACE' : activePresence ? 'ONLINE NOW' : partnerStatus.toUpperCase()}</span><h1>{partnerFirstName}<br /><em>is on the other side.</em></h1><p>{presenceLine(partnerStatus, partnerFirstName)}</p></motion.div>
+      </section>
+      <section className="home-actions-zone" aria-label="Ways to spend time together">
+        <p className="home-actions-label">WHAT DO YOU FEEL LIKE?</p>
         <div className="hangout-actions">{actions.map((action) => <ActionCard key={action.title} {...action} title={action.kind === 'call' ? `CALL ${partnerPronouns.object.toUpperCase()}` : action.title} onClick={action.kind === 'call' ? () => { prefetchCallRooms(); setCallChoiceOpen(true) } : action.kind === 'watch' ? () => navigate('/watch') : () => navigate('/watch?category=music')} />)}</div>
-      </motion.section>
-      <aside className="home-widgets"><CurrentlyCard partnerStatus={partnerStatus} partnerName={partnerName} onJoin={() => navigate('/room')} /><TogetherCounter startDate={couple?.relationship_started_on ?? null} onSaveDate={setRelationshipDate} /><AnnoyButton onShake={triggerShake} partnerPronouns={partnerPronouns} /><div className="micro-doodle"><Sparkles /><span>very serious<br />business</span></div></aside>
-    </div>
-    <AnimatePresence>{presenceToast && <motion.aside className="presence-toast" role="status" initial={{ opacity: 0, y: 16, rotate: -2 }} animate={{ opacity: 1, y: 0, rotate: 1 }} exit={{ opacity: 0, y: 10 }}><span>{presenceToast.copy}</span>{presenceToast.join && <button onClick={() => navigate('/room')}>Join</button>}</motion.aside>}</AnimatePresence>
-    <AnimatePresence>{callChoiceOpen && <motion.div className="date-modal-backdrop" role="dialog" aria-modal="true" aria-label="Choose call type" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.section className="date-modal call-choice-modal" initial={{ scale: .94, y: 14 }} animate={{ scale: 1, y: 0 }} exit={{ scale: .94, y: 14 }}><p className="eyebrow">how annoying are we being?</p><h2>pick a tiny kind of chaos.</h2><div className="call-choice-actions"><button className="animated-button tone-yellow" onClick={() => beginCall('audio')}><Phone size={18} />VOICE CALL</button><button className="animated-button tone-coral" onClick={() => beginCall('video')}><Camera size={18} />VIDEO CALL</button></div><button className="call-choice-cancel" onClick={() => setCallChoiceOpen(false)}>not right now</button></motion.section></motion.div>}</AnimatePresence>
+        {partnerStatus === 'in_room' && <button className="home-room-link" onClick={() => navigate('/room')}>Join {partnerFirstName} in the room <span>&rarr;</span></button>}
+      </section>
+      <aside className="home-secondary" aria-label="Your shared details"><CurrentlyCard partnerStatus={partnerStatus} partnerName={partnerName} onJoin={() => navigate('/room')} /><TogetherCounter startDate={couple?.relationship_started_on ?? null} onSaveDate={setRelationshipDate} /><AnnoyButton onShake={triggerShake} partnerPronouns={partnerPronouns} /><div className="micro-doodle"><Sparkles /><span>STILL HERE.<br />STILL US.</span></div></aside>
+    </section>
+    <AnimatePresence>{presenceToast && <motion.aside className="presence-toast" role="status" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}><span>{presenceToast.copy}</span>{presenceToast.join && <button onClick={() => navigate('/room')}>Enter</button>}</motion.aside>}</AnimatePresence>
+    <AnimatePresence>{callChoiceOpen && <motion.div className="date-modal-backdrop call-choice-backdrop" role="dialog" aria-modal="true" aria-label="Choose call type" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.section className="date-modal call-choice-modal" initial={{ scale: .96, y: 14 }} animate={{ scale: 1, y: 0 }} exit={{ scale: .96, y: 14 }}><p className="eyebrow">OPEN A LINE</p><h2>How would you like to be together?</h2><p className="call-choice-copy">Choose a voice call for the background of each other&apos;s day, or video when faces are required.</p><div className="call-choice-actions"><button className="animated-button tone-yellow" onClick={() => beginCall('audio')}><Phone size={18} />VOICE CALL</button><button className="animated-button tone-coral" onClick={() => beginCall('video')}><Camera size={18} />VIDEO CALL</button></div><button className="call-choice-cancel" onClick={() => setCallChoiceOpen(false)}>Not right now</button></motion.section></motion.div>}</AnimatePresence>
     {showArrival && <PageTransition direction="in" onComplete={() => setShowArrival(false)} />}
   </main>
 }

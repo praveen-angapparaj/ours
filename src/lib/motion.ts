@@ -1,8 +1,8 @@
-export const springButton = { type: 'spring', stiffness: 420, damping: 23, mass: 0.65 } as const
-export const springGentle = { type: 'spring', stiffness: 230, damping: 20, mass: 0.8 } as const
+export const springButton = { type: 'spring', stiffness: 360, damping: 28, mass: 0.72 } as const
+export const springGentle = { type: 'spring', stiffness: 190, damping: 24, mass: 0.9 } as const
 
-export const cardHover = { y: -4, rotate: 0.35, scale: 1.008 } as const
-export const cardPress = { y: 2, scale: 0.985 } as const
+export const cardHover = { y: -2, scale: 1.008 } as const
+export const cardPress = { y: 1, scale: 0.99 } as const
 
 export const pageEnter = {
   initial: { opacity: 0, y: 10 },
@@ -11,15 +11,15 @@ export const pageEnter = {
 } as const
 
 export const stickerDrop = {
-  initial: { opacity: 0, scale: 0.62, rotate: 9, y: -8 },
-  animate: { opacity: 1, scale: 1, rotate: 5, y: 0 },
+  initial: { opacity: 0, scale: 0.9, y: -8 },
+  animate: { opacity: 1, scale: 1, y: 0 },
   transition: { ...springGentle, delay: 0.2 },
 } as const
 
 export const popover = {
-  initial: { opacity: 0, scale: 0.82, y: -7, rotate: -2 },
-  animate: { opacity: 1, scale: 1, y: 0, rotate: 0 },
-  exit: { opacity: 0, scale: 0.9, y: -5 },
+  initial: { opacity: 0, scale: 0.96, y: -5 },
+  animate: { opacity: 1, scale: 1, y: 0 },
+  exit: { opacity: 0, scale: 0.98, y: -3 },
   transition: springGentle,
 } as const
 
