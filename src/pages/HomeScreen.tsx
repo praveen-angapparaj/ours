@@ -12,6 +12,8 @@ import { useCouple } from '../features/couple/use-couple'
 import { profileInitials } from '../features/couple/profile-initials'
 import { useCouplePresence } from '../features/presence/use-couple-presence'
 import { useCall } from '../features/calls/use-call'
+import { AffectionDock } from '../features/affection/AffectionDock'
+import { SharedOrbitUniverse } from '../features/universe/SharedOrbitUniverse'
 import type { CallType } from '../features/calls/types'
 import type { PartnerPresenceStatus } from '../features/presence/presence-types'
 import { pronounsFor } from '../features/auth/pronouns'
@@ -76,19 +78,18 @@ export function HomeScreen() {
   }, [hydrated, partner, partnerFirstName, partnerStatus])
 
   return <main className={`home home-signature page-shell presence-${partnerStatus}`}>
-    <div className="home-sky" aria-hidden="true"><i className="home-orbit-ring home-orbit-ring-one" /><i className="home-orbit-ring home-orbit-ring-two" /><i className="home-star home-star-one" /><i className="home-star home-star-two" /><i className="home-star home-star-three" /></div>
+    <div className="home-sky" aria-hidden="true"><i className="home-star home-star-one" /><i className="home-star home-star-two" /><i className="home-star home-star-three" /></div>
     <header className="app-header"><button className="wordmark" onClick={() => navigate('/home')} aria-label="Return to home">our space<span>TM</span></button><div className="header-people"><UserMenu /><PartnerPresence status={partnerStatus} name={partnerName} onJoin={() => navigate('/room')} onCall={() => { prefetchCallRooms(); void startCall() }} /></div></header>
     <section className="home-orbit-layout">
       <section className="home-presence-hero" aria-label={`${partnerName}'s presence`}>
         <p className="eyebrow">YOUR SHARED ORBIT</p>
-        <motion.div className={`partner-orbit${activePresence ? ' is-active' : ''}`} initial={{ opacity: 0, scale: .94 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .48, ease: 'easeOut' }}>
-          <span className="partner-orbit-track partner-orbit-track-wide" /><span className="partner-orbit-track partner-orbit-track-close" /><span className="partner-orbit-you">Y</span><span className="partner-orbit-them">{partnerInitials}</span><span className="partner-orbit-light" />
-        </motion.div>
+        <motion.div initial={{ opacity: 0, scale: .94 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .48, ease: 'easeOut' }}><SharedOrbitUniverse partnerInitials={partnerInitials} partnerName={partnerName} /></motion.div>
         <motion.div className="home-hero-copy" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .1, duration: .35 }}><span className="home-presence-state"><i />{partnerStatus === 'in_room' ? 'IN YOUR SPACE' : activePresence ? 'ONLINE NOW' : partnerStatus.toUpperCase()}</span><h1>{partnerFirstName}<br /><em>is on the other side.</em></h1><p>{presenceLine(partnerStatus, partnerFirstName)}</p></motion.div>
       </section>
       <section className="home-actions-zone" aria-label="Ways to spend time together">
         <p className="home-actions-label">WHAT DO YOU FEEL LIKE?</p>
         <div className="hangout-actions">{actions.map((action) => <ActionCard key={action.title} {...action} title={action.kind === 'call' ? `CALL ${partnerPronouns.object.toUpperCase()}` : action.title} onClick={action.kind === 'call' ? () => { prefetchCallRooms(); setCallChoiceOpen(true) } : action.kind === 'watch' ? () => navigate('/watch') : () => navigate('/watch?category=music')} />)}</div>
+        <AffectionDock partnerName={partnerName} />
         {partnerStatus === 'in_room' && <button className="home-room-link" onClick={() => navigate('/room')}>Join {partnerFirstName} in the room <span>&rarr;</span></button>}
       </section>
       <aside className="home-secondary" aria-label="Your shared details"><CurrentlyCard partnerStatus={partnerStatus} partnerName={partnerName} onJoin={() => navigate('/room')} /><TogetherCounter startDate={couple?.relationship_started_on ?? null} onSaveDate={setRelationshipDate} /></aside>

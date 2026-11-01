@@ -3,6 +3,7 @@ import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useCall } from './use-call'
 import { isLiveCallState } from './types'
 import { NightRemoteMediaBridge } from '../night/NightRemoteMediaBridge'
+import { CallMediaReadyProvider } from './call-media-state'
 
 // The LiveKit room belongs to the active call, not to the /room page. Keeping
 // it here lets audio/video continue while a paired couple visits /watch.
@@ -11,31 +12,35 @@ export function CallMediaProvider({ children }: { children: ReactNode }) {
   const liveSession = isLiveCallState(state) ? state : null
   const connectionError = liveSession?.status === 'connecting' ? liveSession.connectionError : undefined
 
-  if (!liveSession || connectionError || !liveSession.token || !liveSession.serverUrl) return <>{children}</>
+  if (!liveSession || connectionError || !liveSession.token || !liveSession.serverUrl) {
+    return <CallMediaReadyProvider ready={false}>{children}</CallMediaReadyProvider>
+  }
 
   const { call, token, serverUrl, attempt } = liveSession
-  return <LiveKitRoom
-    key={`${call.id}:${attempt}`}
-    token={token}
-    serverUrl={serverUrl}
-    connect
-    audio={false}
-    video={false}
-    options={{
-      // Closing a document will naturally close its socket. Opting out here
-      // avoids intentionally ending a healthy room during page lifecycle / BFCache handling.
-      disconnectOnPageLeave: false,
-      stopLocalTrackOnUnpublish: true,
-      adaptiveStream: true,
-      dynacast: true,
-      videoCaptureDefaults: { resolution: { width: 640, height: 480, frameRate: 20 } },
-    }}
-    onConnected={() => markRoomConnected(call.id, attempt)}
-    onError={(error) => reportRoomConnectionError(call.id, attempt, error)}
-    onDisconnected={(reason) => reportRoomDisconnected(call.id, attempt, reason)}
-  >
-    <RoomAudioRenderer />
-    <NightRemoteMediaBridge />
-    {children}
-  </LiveKitRoom>
+  return <CallMediaReadyProvider ready>
+    <LiveKitRoom
+      key={`${call.id}:${attempt}`}
+      token={token}
+      serverUrl={serverUrl}
+      connect
+      audio={false}
+      video={false}
+      options={{
+        // Closing a document will naturally close its socket. Opting out here
+        // avoids intentionally ending a healthy room during page lifecycle / BFCache handling.
+        disconnectOnPageLeave: false,
+        stopLocalTrackOnUnpublish: true,
+        adaptiveStream: true,
+        dynacast: true,
+        videoCaptureDefaults: { resolution: { width: 640, height: 480, frameRate: 20 } },
+      }}
+      onConnected={() => markRoomConnected(call.id, attempt)}
+      onError={(error) => reportRoomConnectionError(call.id, attempt, error)}
+      onDisconnected={(reason) => reportRoomDisconnected(call.id, attempt, reason)}
+    >
+      <RoomAudioRenderer />
+      <NightRemoteMediaBridge />
+      {children}
+    </LiveKitRoom>
+  </CallMediaReadyProvider>
 }

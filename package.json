@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@livekit/components-react": "^2.9.24",
@@ -26,6 +27,7 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "tailwindcss": "^4.3.3",
-    "typescript": "latest"
+    "typescript": "latest",
+    "vitest": "^5.0.5"
   }
 }

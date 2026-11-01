@@ -8,11 +8,11 @@ type ActivityCopy = { label: string; title: string; subcopy: string; joinable?: 
 
 function activityFor(status: PartnerPresenceStatus, partnerName: string): ActivityCopy {
   const firstName = partnerName.trim().split(/\s+/)[0] || 'your person'
-  if (status === 'in_room') return { label: 'IN THE ROOM', title: `${firstName} saved you a spot.`, subcopy: 'go be a little silly together.', joinable: true }
-  if (status === 'online') return { label: 'CURRENTLY', title: 'Two people online.', subcopy: 'suspiciously convenient.' }
-  if (status === 'away') return { label: 'CURRENTLY', title: `${firstName} temporarily vanished.`, subcopy: 'probably doing something suspicious.' }
-  if (status === 'unknown') return { label: 'CURRENTLY', title: 'Status temporarily unknown.', subcopy: 'reconnecting to the tiny internet universe.' }
-  return { label: 'CURRENTLY', title: 'Nothing happening.', subcopy: 'suspiciously peaceful.' }
+  if (status === 'in_room') return { label: 'INSIDE THE ORBIT', title: 'Your shared orbit is active.', subcopy: `${firstName} saved you a small patch of sky.`, joinable: true }
+  if (status === 'online') return { label: 'ORBITAL SIGNAL', title: 'Both signals are in orbit.', subcopy: 'the distance is only scenery.' }
+  if (status === 'away') return { label: 'ORBITAL SIGNAL', title: `${firstName}'s signal is beyond the horizon.`, subcopy: 'the orbit stays open.' }
+  if (status === 'unknown') return { label: 'ORBITAL SIGNAL', title: 'Your signal is finding theirs.', subcopy: 'reconnecting the little universe you keep.' }
+  return { label: 'ORBITAL SIGNAL', title: 'The sky is quiet, not empty.', subcopy: 'their planet is still in your orbit.' }
 }
 
 export function CurrentlyCard({ partnerStatus, partnerName, onJoin }: { partnerStatus: PartnerPresenceStatus; partnerName: string; onJoin: () => void }) {

@@ -22,6 +22,17 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unexpected server error';
 }
 
+function trustedThumbnailUrl(value: unknown) {
+  if (typeof value !== 'string') return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.hostname !== 'i.ytimg.com' || !url.pathname.startsWith('/vi/')) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -97,8 +108,12 @@ serve(async (req) => {
       const title = item.snippet?.title;
       const channelTitle = item.snippet?.channelTitle;
       const thumbnail = item.snippet?.thumbnails?.high?.url ?? item.snippet?.thumbnails?.medium?.url ?? item.snippet?.thumbnails?.default?.url;
-      if (typeof videoId !== 'string' || !/^[A-Za-z0-9_-]{11}$/.test(videoId) || typeof title !== 'string' || typeof channelTitle !== 'string' || typeof thumbnail !== 'string') return [];
-      return [{ videoId, title, channelTitle, thumbnail }];
+      const safeThumbnail = trustedThumbnailUrl(thumbnail);
+      if (typeof videoId !== 'string' || !/^[A-Za-z0-9_-]{11}$/.test(videoId)
+        || typeof title !== 'string' || title.trim().length === 0 || title.length > 300
+        || typeof channelTitle !== 'string' || channelTitle.trim().length === 0 || channelTitle.length > 200
+        || !safeThumbnail) return [];
+      return [{ videoId, title: title.trim(), channelTitle: channelTitle.trim(), thumbnail: safeThumbnail }];
     });
 
     return json({ results });

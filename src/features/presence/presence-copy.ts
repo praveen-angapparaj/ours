@@ -5,7 +5,7 @@ const copy: Record<PartnerPresenceStatus, readonly string[]> = {
   in_room: ['waiting for you in our room'],
   away: ['probably doing something suspicious', 'temporarily vanished'],
   offline: ['currently touching grass', 'escaped the internet'],
-  unknown: ['status temporarily unknown'],
+  unknown: ['aligning their signal'],
 }
 
 function stableIndex(seed: string, length: number) {

@@ -1,12 +1,14 @@
 import { memo, useEffect, useState, type CSSProperties } from 'react'
+import type { AffectionMomentType } from '../affection/affection-types'
 
 export type NightVisualState = {
   active: boolean
-  mode: 'idle' | 'call-ringing' | 'call-connected' | 'watch-idle' | 'watch-playing' | 'watch-paused' | 'watch-with-call'
+  mode: 'idle' | 'call-ringing' | 'call-connected' | 'watch-idle' | 'watch-playing' | 'watch-paused' | 'watch-with-call' | 'affection'
   moonPhase: number
   moonBrightness: number
   remoteCameraActive: boolean
   reducedMotion: boolean
+  affectionType: AffectionMomentType | null
 }
 
 type Star = { left: number; top: number; size: number; opacity: number; delay: number; duration: number }
@@ -71,5 +73,12 @@ function Moon({ phase, brightness }: { phase: number; brightness: number }) {
 
 export function SharedNightEnvironment({ state }: { state: NightVisualState }) {
   const className = `shared-night-environment${state.active ? ' is-active' : ''} is-${state.mode}${state.remoteCameraActive ? ' has-remote-camera' : ''}`
-  return <div className={className} aria-hidden="true"><div className="night-sky-depth" /><StarField reducedMotion={state.reducedMotion} /><Moon phase={state.moonPhase} brightness={state.moonBrightness} /><ShootingStar active={state.active} reducedMotion={state.reducedMotion} mode={state.mode} /></div>
+  return <div className={className} aria-hidden="true">
+    <div className="night-sky-depth" />
+    {state.active && <>
+      <StarField reducedMotion={state.reducedMotion} />
+      <Moon phase={state.moonPhase} brightness={state.moonBrightness} />
+      <ShootingStar active reducedMotion={state.reducedMotion} mode={state.mode} />
+    </>}
+  </div>
 }

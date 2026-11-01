@@ -5,6 +5,7 @@ import { useCouple } from '../couple/use-couple'
 import { friendlyWatchError, getWatchSession, updateWatchSession } from './watch-service'
 import type { WatchMutation, WatchRealtimeState, WatchSession } from './watch-types'
 import { isWatchSession } from './watch-types'
+import { shouldAcceptWatchSession } from './watch-sync'
 
 type WatchContextValue = {
   session: WatchSession | null
@@ -19,20 +20,12 @@ type WatchContextValue = {
   clearError: () => void
 }
 
-type WatchSyncPayload = { session: WatchSession }
-
 export const WatchContext = createContext<WatchContextValue | null>(null)
 
 function payloadSession(payload: unknown) {
   if (!payload || typeof payload !== 'object') return null
   const next = (payload as { new?: unknown }).new
   return isWatchSession(next) ? next : null
-}
-
-function payloadWatchSync(payload: unknown) {
-  if (!payload || typeof payload !== 'object') return null
-  const session = (payload as WatchSyncPayload).session
-  return isWatchSession(session) ? session : null
 }
 
 export function WatchProvider({ children }: { children: ReactNode }) {
@@ -47,11 +40,12 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   const sessionRef = useRef<WatchSession | null>(null)
   const mutationQueueRef = useRef<Promise<unknown>>(Promise.resolve())
   const syncChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const syncRefreshTimerRef = useRef<number | undefined>(undefined)
   const realtimeReady = Boolean(authSession?.access_token)
 
   const acceptSession = useCallback((next: WatchSession) => {
     const current = sessionRef.current
-    if (current && next.couple_id === current.couple_id && next.state_version < current.state_version) return
+    if (!shouldAcceptWatchSession(current, next)) return
     sessionRef.current = next
     if (mountedRef.current) setSession(next)
   }, [])
@@ -69,9 +63,24 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     }
   }, [acceptSession, couple?.id, pairingState, user?.id])
 
+  const refreshFromSyncBroadcast = useCallback(() => {
+    // Broadcast authorization proves that the sender belongs to this couple,
+    // but it does not attest to arbitrary client-provided payload fields. The
+    // database session is the only canonical source, so coalesce incoming
+    // hints into one authoritative read instead of applying their contents.
+    window.clearTimeout(syncRefreshTimerRef.current)
+    syncRefreshTimerRef.current = window.setTimeout(() => {
+      syncRefreshTimerRef.current = undefined
+      void refresh().catch(() => undefined)
+    }, 80)
+  }, [refresh])
+
   useEffect(() => {
     mountedRef.current = true
-    return () => { mountedRef.current = false }
+    return () => {
+      mountedRef.current = false
+      window.clearTimeout(syncRefreshTimerRef.current)
+    }
   }, [])
 
   useEffect(() => {
@@ -106,8 +115,8 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     let disposed = false
     const channel = supabase
       // Postgres Changes is protected by the watch_sessions SELECT policy. This
-      // stays a normal channel so it does not require a separate realtime.messages
-      // authorization policy just to receive table changes.
+      // stays a normal channel so it does not require a separate
+      // realtime.messages authorization policy just to receive table changes.
       .channel(`watch-session:${couple.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'watch_sessions', filter: `couple_id=eq.${couple.id}` }, (payload) => {
         const next = payloadSession(payload)
@@ -136,18 +145,16 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     if (!user || !couple || pairingState !== 'paired' || !realtimeReady) return
     const channel = supabase
       .channel(`couple:${couple.id}:watch-sync`, { config: { private: true, broadcast: { self: false, ack: false } } })
-      .on<WatchSyncPayload>('broadcast', { event: 'watch-session' }, ({ payload }) => {
-        const next = payloadWatchSync(payload)
-        if (next && next.couple_id === couple.id) acceptSession(next)
-      })
+      .on('broadcast', { event: 'watch-session' }, refreshFromSyncBroadcast)
 
     syncChannelRef.current = channel
     channel.subscribe()
     return () => {
       if (syncChannelRef.current === channel) syncChannelRef.current = null
+      window.clearTimeout(syncRefreshTimerRef.current)
       void supabase.removeChannel(channel)
     }
-  }, [acceptSession, couple?.id, pairingState, realtimeReady, user?.id])
+  }, [couple?.id, pairingState, realtimeReady, refreshFromSyncBroadcast, user?.id])
 
   useEffect(() => {
     if (!user || !couple || pairingState !== 'paired') return

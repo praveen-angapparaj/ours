@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Orbit, Radio } from 'lucide-react'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PartnerPresence } from '../components/home/PartnerPresence'
@@ -14,6 +14,7 @@ import { useCouplePresence } from '../features/presence/use-couple-presence'
 import type { PartnerPresenceStatus } from '../features/presence/presence-types'
 import { useCall } from '../features/calls/use-call'
 import { isLiveCallState, type LiveCallRuntimeState } from '../features/calls/types'
+import { useCallMediaReady } from '../features/calls/call-media-state'
 
 const LiveAudioCallRoom = lazy(() => import('../features/calls/LiveAudioCallRoom').then((module) => ({ default: module.LiveAudioCallRoom })))
 const LiveVideoCallRoom = lazy(() => import('../features/calls/LiveVideoCallRoom').then((module) => ({ default: module.LiveVideoCallRoom })))
@@ -36,7 +37,7 @@ function BaseRoomContent({ localMicOn, localCameraOn, mediaAvailable, onMicToggl
   const [reactions, setReactions] = useState<Reaction[]>([])
   const [filtersOn, setFiltersOn] = useState(false)
   const [reactionsOpen, setReactionsOpen] = useState(() => !window.matchMedia('(max-width: 760px)').matches)
-  const [roomNote, setRoomNote] = useState(`waiting for ${partnerName} to arrive...`)
+  const [roomNote, setRoomNote] = useState(`waiting for ${partnerName} at the observatory`)
   const previousStatus = useRef<PartnerPresenceStatus | null>(null)
   const noteTimer = useRef<number | undefined>(undefined)
 
@@ -45,16 +46,16 @@ function BaseRoomContent({ localMicOn, localCameraOn, mediaAvailable, onMicToggl
     if (!hydrated || !partner) return
     const previous = previousStatus.current
     previousStatus.current = partnerStatus
-    if (!previous) { setRoomNote(partnerStatus === 'in_room' ? `FOUND ${partnerName.toUpperCase()}!` : `waiting for ${partnerName} to arrive...`); return }
-    if (previous !== 'in_room' && partnerStatus === 'in_room') { setRoomNote(`FOUND ${partnerName.toUpperCase()}!`); return }
+    if (!previous) { setRoomNote(partnerStatus === 'in_room' ? `${partnerName} is here` : `waiting for ${partnerName} at the observatory`); return }
+    if (previous !== 'in_room' && partnerStatus === 'in_room') { setRoomNote(`${partnerName} just arrived`); return }
     if (previous === 'in_room' && partnerStatus !== 'in_room') {
-      const fallback = partnerStatus === 'online' ? `${partnerName} is still online. invite them in.` : `waiting for ${partnerName} to arrive...`
-      setRoomNote(partnerStatus === 'online' ? `${partnerName} escaped the room.` : 'well. rude.')
+      const fallback = partnerStatus === 'online' ? `${partnerName} is online — send a signal` : `waiting for ${partnerName} at the observatory`
+      setRoomNote(partnerStatus === 'online' ? `${partnerName} stepped away` : 'the observatory is quiet again')
       window.clearTimeout(noteTimer.current)
       noteTimer.current = window.setTimeout(() => setRoomNote(fallback), 2_800)
       return
     }
-    if (partnerStatus === 'offline') setRoomNote(`${partnerName} is offline. bring snacks for later.`)
+    if (partnerStatus === 'offline') setRoomNote(`${partnerName} is offline — the light stays on`)
   }, [hydrated, partner, partnerName, partnerStatus])
 
   const sendReaction = (kind: ReactionKind, symbol: string) => {
@@ -62,17 +63,17 @@ function BaseRoomContent({ localMicOn, localCameraOn, mediaAvailable, onMicToggl
     setReactions((current) => [...current.slice(-7), reaction])
   }
 
-  return <main className="room-page page-shell">
+  return <main className="room-page page-shell room-observatory">
     <header className="room-header">
-      <button className="back-button" onClick={() => navigate('/home')} aria-label="Return to home"><ArrowLeft size={18} /> <span>back to our mess</span></button>
-      <div className="room-name"><span className="room-live-dot" />our space is open</div>
+      <button className="back-button" onClick={() => navigate('/home')} aria-label="Return to your shared orbit"><ArrowLeft size={18} /> <span>return to orbit</span></button>
+      <div className="room-name room-observatory-name"><span className="room-live-dot" aria-hidden="true" /><Orbit size={14} aria-hidden="true" /><span>shared observatory</span></div>
       <div className="room-status"><PartnerPresence compact status={partnerStatus} name={partnerName} onJoin={() => navigate('/room')} onCall={() => void startCall()} /></div>
     </header>
-    <AnimatePresence mode="wait"><motion.p key={roomNote} className="room-presence-note" initial={{ opacity: 0, y: -5, rotate: -1 }} animate={{ opacity: 1, y: 0, rotate: 1 }} exit={{ opacity: 0, y: 4 }}>{roomNote}</motion.p></AnimatePresence>
-    <section className="room-stage">
+    <AnimatePresence mode="wait"><motion.p key={roomNote} className="room-presence-note" role="status" aria-live="polite" initial={{ opacity: 0, y: -5, rotate: -1 }} animate={{ opacity: 1, y: 0, rotate: 1 }} exit={{ opacity: 0, y: 4 }}><Radio className="room-presence-note-icon" size={12} aria-hidden="true" /><span>{roomNote}</span></motion.p></AnimatePresence>
+    <section className="room-stage room-observatory-stage" aria-label="Shared observatory">
       <RoomCanvas mode="empty" onMediaSelect={(kind) => navigate(kind === 'music' ? '/watch?category=music' : '/watch')} />
-      <ParticipantCard name={partnerName} label={partnerStatus === 'in_room' ? 'PARTNER IN ROOM' : 'PARTNER'} avatar={partnerInitial} cameraEnabled={false} microphoneEnabled={false} isSpeaking={false} connectionState="good" variant="coral" isSelf={false} />
-      <ParticipantCard name="You" label="YOU, UNFORTUNATELY" avatar=":)" cameraEnabled={localCameraOn} microphoneEnabled={localMicOn} isSpeaking={false} connectionState="good" variant="blue" isSelf filtersEnabled={filtersOn} />
+      <ParticipantCard name={partnerName} label={partnerStatus === 'in_room' ? 'IN THE OBSERVATORY' : 'THEIR WINDOW'} avatar={partnerInitial} cameraEnabled={false} microphoneEnabled={false} isSpeaking={false} connectionState="good" variant="coral" isSelf={false} />
+      <ParticipantCard name="You" label="YOUR WINDOW" avatar="Y" cameraEnabled={localCameraOn} microphoneEnabled={localMicOn} isSpeaking={false} connectionState="good" variant="blue" isSelf filtersEnabled={filtersOn} />
     </section>
     <ReactionTray open={reactionsOpen} onReaction={sendReaction} />
     <CallControls micOn={localMicOn} cameraOn={localCameraOn} filtersOn={filtersOn} reactionsOpen={reactionsOpen} mediaOpen={false} mediaUnavailable={!mediaAvailable} onMic={onMicToggle} onCamera={onCameraToggle} onReactions={() => setReactionsOpen((current) => !current)} onFilters={() => setFiltersOn((current) => !current)} onMedia={() => navigate('/watch')} onHangup={() => navigate('/home')} />
@@ -106,6 +107,7 @@ function CallConnecting({ call, error }: { call: LiveCallRuntimeState['call'], e
 export function RoomScreen() {
   const navigate = useNavigate()
   const { state } = useCall()
+  const mediaReady = useCallMediaReady()
   const wasLiveCall = useRef(false)
   const liveState = isLiveCallState(state) ? state : null
 
@@ -122,7 +124,7 @@ export function RoomScreen() {
 
   if (liveState) {
     const connectionError = liveState.status === 'connecting' ? liveState.connectionError : undefined
-    if (connectionError || !liveState.token || !liveState.serverUrl) return <CallConnecting call={liveState.call} error={connectionError} />
+    if (connectionError || !liveState.token || !liveState.serverUrl || !mediaReady) return <CallConnecting call={liveState.call} error={connectionError} />
     return <Suspense fallback={<CallConnecting call={liveState.call} />}>{liveState.call.call_type === 'video' ? <LiveVideoCallRoom session={liveState} /> : <LiveAudioCallRoom session={liveState} />}</Suspense>
   }
   return <IdleRoomContent />

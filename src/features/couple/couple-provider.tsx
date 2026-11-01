@@ -24,7 +24,6 @@ export function CoupleProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       if (requestId !== refreshRequestRef.current) return
       const snapshotError = error as { code?: string; message?: string; details?: string | null; hint?: string | null }
-      console.error(`[Our Space] couple snapshot failed - code: ${snapshotError.code ?? 'unknown'} | message: ${snapshotError.message ?? 'unknown'} | details: ${snapshotError.details ?? 'none'} | hint: ${snapshotError.hint ?? 'none'}`)
       setSnapshot((current) => current.couple
         ? { ...current, error: friendlyPairingError(snapshotError as Error) }
         : { state: 'error', couple: null, members: [], partner: null, error: friendlyPairingError(snapshotError as Error) })
@@ -48,8 +47,25 @@ export function CoupleProvider({ children }: { children: ReactNode }) {
     window.addEventListener('pageshow', onPageShow)
     return () => { window.removeEventListener('online', revalidate); window.removeEventListener('pageshow', onPageShow) }
   }, [refresh, user])
-  const createSpace = useCallback(async () => { try { const result = await createMyCouple(); await refresh(); return result.invite_code } catch (error) { const rpcError = error as { code?: string; message?: string; details?: string | null; hint?: string | null }; console.error(`[Our Space] create_my_couple failed - code: ${rpcError.code ?? 'unknown'} | message: ${rpcError.message ?? 'unknown'} | details: ${rpcError.details ?? 'none'} | hint: ${rpcError.hint ?? 'none'}`); const message = friendlyPairingError(rpcError as Error); setSnapshot((current) => ({ ...current, state: 'error', error: message })); throw new Error(message) } }, [refresh])
-  const joinWithCode = useCallback(async (code: string) => { try { await joinCoupleByCode(code); await refresh() } catch (error) { const rpcError = error as { code?: string; message?: string; details?: string | null; hint?: string | null }; console.error(`[Our Space] join_couple_by_code failed — code: ${rpcError.code ?? 'unknown'} | message: ${rpcError.message ?? 'unknown'} | details: ${rpcError.details ?? 'none'} | hint: ${rpcError.hint ?? 'none'}`); const message = friendlyPairingError(new Error(rpcError.message ?? 'pairing_error_without_message')); throw new Error(message) } }, [refresh])
+  const createSpace = useCallback(async () => {
+    try {
+      const result = await createMyCouple()
+      await refresh()
+      return result.invite_code
+    } catch (error) {
+      const message = friendlyPairingError(error as Error)
+      setSnapshot((current) => ({ ...current, state: 'error', error: message }))
+      throw new Error(message)
+    }
+  }, [refresh])
+  const joinWithCode = useCallback(async (code: string) => {
+    try {
+      await joinCoupleByCode(code)
+      await refresh()
+    } catch (error) {
+      throw new Error(friendlyPairingError(error as Error))
+    }
+  }, [refresh])
   const cancelWaitingSpace = useCallback(async () => { try { await cancelMyUnpairedCouple(); await refresh() } catch (error) { const message = friendlyPairingError(error as Error); throw new Error(message) } }, [refresh])
   const setRelationshipDate = useCallback(async (date: string) => { try { await updateRelationshipDate(date); await refresh(true) } catch (error) { throw new Error(friendlyPairingError(error as Error)) } }, [refresh])
   const value = useMemo<CoupleContextValue>(() => ({ ...snapshot, refresh, createSpace, joinWithCode, cancelWaitingSpace, setRelationshipDate }), [snapshot, refresh, createSpace, joinWithCode, cancelWaitingSpace, setRelationshipDate])

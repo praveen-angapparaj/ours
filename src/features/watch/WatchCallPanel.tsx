@@ -6,6 +6,7 @@ import { useCouple } from '../couple/use-couple'
 import { useCall } from '../calls/use-call'
 import { isLiveCallState } from '../calls/types'
 import { useSerializedMediaAction } from '../calls/use-serialized-media-action'
+import { useCallMediaReady } from '../calls/call-media-state'
 
 type WatchCallPanelProps = { chatOpen: boolean; onToggleChat: () => void }
 
@@ -103,6 +104,8 @@ function ActiveWatchCallPanel({ chatOpen, onToggleChat }: WatchCallPanelProps) {
 
 export function WatchCallPanel(props: WatchCallPanelProps) {
   const { state } = useCall()
+  const mediaReady = useCallMediaReady()
   if (!isLiveCallState(state) || !state.token || !state.serverUrl) return <WatchTogetherModes {...props} />
+  if (!mediaReady) return <aside className="watch-call-panel watch-call-modes" aria-live="polite"><div className="watch-call-heading"><span className="room-live-dot" /><span><b>Connecting your call</b><small>Your watch room is staying open.</small></span></div></aside>
   return <ActiveWatchCallPanel {...props} />
 }

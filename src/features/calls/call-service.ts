@@ -42,7 +42,7 @@ export async function getLiveKitToken(callId: string): Promise<{ token: string; 
 
   try {
     const url = new URL(data.serverUrl);
-    if (url.protocol !== 'wss:' && url.protocol !== 'ws:') throw new Error('invalid_protocol');
+    if (url.protocol !== 'wss:') throw new Error('invalid_protocol');
   } catch {
     throw new Error('livekit_url_invalid');
   }
@@ -50,13 +50,14 @@ export async function getLiveKitToken(callId: string): Promise<{ token: string; 
   return { token: data.token, serverUrl: data.serverUrl };
 }
 
-export async function getActiveCall(): Promise<Call | null> {
+export async function getActiveCall(coupleId: string): Promise<Call | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
   
   const { data, error } = await supabase
     .from('calls')
     .select('*')
+    .eq('couple_id', coupleId)
     .or(`caller_id.eq.${user.id},callee_id.eq.${user.id}`)
     .in('status', ['ringing', 'accepted'])
     .order('created_at', { ascending: false })

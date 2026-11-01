@@ -27,7 +27,7 @@ export function CallOverlays() {
         {state.status === 'incoming-ringing' && (
           <motion.div 
             className="date-modal-backdrop"
-            style={{ zIndex: 100 }}
+            style={{ zIndex: 120 }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -58,7 +58,7 @@ export function CallOverlays() {
         {(state.status === 'outgoing-ringing' || state.status === 'creating' || state.status === 'accepting') && (
           <motion.div 
             className="date-modal-backdrop"
-            style={{ zIndex: 100 }}
+            style={{ zIndex: 120 }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

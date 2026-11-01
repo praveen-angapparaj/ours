@@ -9,14 +9,23 @@ export type YouTubeSearchResult = {
 
 export type YouTubeSearchCategory = 'video' | 'music'
 
+function isTrustedThumbnailUrl(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.hostname === 'i.ytimg.com' && url.pathname.startsWith('/vi/')
+  } catch {
+    return false
+  }
+}
+
 function isSearchResult(value: unknown): value is YouTubeSearchResult {
   if (!value || typeof value !== 'object') return false
   const result = value as Record<string, unknown>
   return typeof result.videoId === 'string'
     && /^[A-Za-z0-9_-]{11}$/.test(result.videoId)
-    && typeof result.title === 'string'
-    && typeof result.channelTitle === 'string'
-    && typeof result.thumbnail === 'string'
+    && typeof result.title === 'string' && result.title.trim().length > 0 && result.title.length <= 300
+    && typeof result.channelTitle === 'string' && result.channelTitle.trim().length > 0 && result.channelTitle.length <= 200
+    && typeof result.thumbnail === 'string' && isTrustedThumbnailUrl(result.thumbnail)
 }
 
 export async function searchYouTube(query: string, category: YouTubeSearchCategory = 'video') {

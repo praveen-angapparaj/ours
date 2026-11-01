@@ -10,6 +10,9 @@ import { NightEnvironmentProvider } from './features/night/NightEnvironmentProvi
 import { useCall } from './features/calls/use-call'
 import { isLiveCallState } from './features/calls/types'
 import { WatchProvider } from './features/watch/WatchProvider'
+import { AffectionProvider } from './features/affection/AffectionProvider'
+import { CallMediaReadyProvider } from './features/calls/call-media-state'
+import { loadCallMediaProvider } from './features/calls/call-media-loader'
 import { AuthRoute, PairingRoute, ProtectedRoute } from './components/layout/RouteGuards'
 import { AppLoader } from './components/layout/AppLoader'
 
@@ -20,7 +23,7 @@ const RoomScreen = lazy(() => import('./pages/RoomScreen').then((module) => ({ d
 const WatchScreen = lazy(() => import('./pages/WatchScreen').then((module) => ({ default: module.WatchScreen })))
 const LandingScreen = lazy(() => import('./pages/LandingScreen').then((module) => ({ default: module.LandingScreen })))
 const CallOverlays = lazy(() => import('./features/calls/CallOverlays').then((module) => ({ default: module.CallOverlays })))
-const CallMediaProvider = lazy(() => import('./features/calls/CallMediaProvider').then((module) => ({ default: module.CallMediaProvider })))
+const CallMediaProvider = lazy(() => loadCallMediaProvider().then((module) => ({ default: module.CallMediaProvider })))
 
 function ScreenLoader({ children }: { children: ReactNode }) {
   return <Suspense fallback={<AppLoader />}>{children}</Suspense>
@@ -36,8 +39,16 @@ function CallMediaBoundary({ children }: { children: ReactNode }) {
   const { state } = useCall()
   const liveState = isLiveCallState(state) ? state : null
   const connectionError = liveState?.status === 'connecting' ? liveState.connectionError : undefined
-  if (!liveState || connectionError || !liveState.token || !liveState.serverUrl) return <>{children}</>
-  return <Suspense fallback={<AppLoader message="keeping the call connected..." />}><CallMediaProvider>{children}</CallMediaProvider></Suspense>
+  if (!liveState || connectionError || !liveState.token || !liveState.serverUrl) {
+    return <CallMediaReadyProvider ready={false}>{children}</CallMediaReadyProvider>
+  }
+
+  // The fallback intentionally preserves the currently visible route. A small
+  // readiness context lets call-aware screens keep their connecting UI until
+  // LiveKit has loaded instead of blanking the entire application.
+  return <Suspense fallback={<CallMediaReadyProvider ready={false}>{children}</CallMediaReadyProvider>}>
+    <CallMediaProvider>{children}</CallMediaProvider>
+  </Suspense>
 }
 
 // A small per-tab recovery hint for an actual browser discard. BrowserRouter
@@ -77,7 +88,7 @@ function ContinuitySnapshot() {
 }
 
 export function AuthenticatedApp() {
-  return <AuthProvider><CoupleProvider><CouplePresenceProvider><CallProvider>
+  return <AuthProvider><CoupleProvider><CouplePresenceProvider><CallProvider><AffectionProvider>
     <NightEnvironmentProvider>
       <ContinuitySnapshot />
       <CallMediaBoundary>
@@ -94,5 +105,5 @@ export function AuthenticatedApp() {
         <CallOverlayBoundary />
       </CallMediaBoundary>
     </NightEnvironmentProvider>
-  </CallProvider></CouplePresenceProvider></CoupleProvider></AuthProvider>
+  </AffectionProvider></CallProvider></CouplePresenceProvider></CoupleProvider></AuthProvider>
 }

@@ -5,6 +5,8 @@ import { useAuth } from '../auth/use-auth'
 import { useCouple } from '../couple/use-couple'
 import { createCall, expireStaleCalls, getActiveCall, getLiveKitToken, touchCall, updateCallStatus } from './call-service'
 import { isLiveCallState, type Call, type CallRuntimeState, type CallType } from './types'
+import { preloadCallMediaProvider } from './call-media-loader'
+import { isCallTransitionRace } from './call-lifecycle'
 
 type CallContextValue = {
   state: CallRuntimeState
@@ -34,15 +36,15 @@ const clientInitiatedDisconnectReason = 1 as DisconnectReason
 
 function asMessage(error: unknown) {
   const message = error instanceof Error ? error.message : 'call_failed'
-  if (message.includes('call_already_exists')) return 'someone already started this nonsense.'
+  if (message.includes('call_already_exists')) return 'There is already an active call in your space.'
   if (message.includes('partner_not_found') || message.includes('couple_not_found') || message.includes('relationship_no_longer_active')) return 'your pairing changed. refresh the page and try again.'
-  if (message.includes('call_expired')) return 'they did not pick up. tragic.'
+  if (message.includes('call_expired')) return 'The call timed out before it connected.'
   if (message.includes('livekit_token_invalid') || message.includes('livekit_url_invalid')) return 'the call server sent an invalid address. check its setup.'
   if (message.includes('timeout') || message.includes('timed out')) return 'the call server took too long. try again.'
   if (message.includes('microphone') || message.includes('device')) return 'your microphone said no. check its permission and try again.'
   if (message.includes('unauthorized') || message.includes('forbidden')) return 'that call is not yours to join.'
-  if (message.includes('network') || message.includes('fetch')) return 'the internet has chosen violence. try again.'
-  return 'couldn\'t reach them. try again in a moment.'
+  if (message.includes('network') || message.includes('fetch')) return 'The connection is unavailable right now. Try again in a moment.'
+  return 'The call could not be completed. Try again in a moment.'
 }
 
 function stateForCall(call: Call, userId: string): CallRuntimeState {
@@ -59,10 +61,10 @@ function callFromState(state: CallRuntimeState): Call | null {
 }
 
 function terminalMessage(call: Call, userId: string) {
-  if (call.status === 'declined') return 'they declined. perhaps send a suspiciously long text instead.'
-  if (call.status === 'cancelled') return call.caller_id === userId ? 'call cancelled.' : 'they hung up before you could answer.'
-  if (call.status === 'missed') return 'they did not pick up. tragic.'
-  return 'call ended. back to your regularly scheduled nonsense.'
+  if (call.status === 'declined') return 'The call was declined.'
+  if (call.status === 'cancelled') return call.caller_id === userId ? 'Call cancelled.' : 'The call was cancelled before you answered.'
+  if (call.status === 'missed') return 'The call timed out before it was answered.'
+  return 'Call ended.'
 }
 
 function disconnectMessage(reason?: DisconnectReason) {
@@ -130,7 +132,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const reconcileActiveCall = useCallback(async () => {
     if (!userId || !coupleId) return
     const callIdAtRequestStart = callFromState(stateRef.current)?.id ?? null
-    const call = await getActiveCall()
+    const call = await getActiveCall(coupleId)
     if (call) {
       applyCallUpdate(call)
       return
@@ -143,6 +145,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
       ? { status: 'idle' }
       : current)
   }, [applyCallUpdate, coupleId, userId])
+
+  useEffect(() => {
+    if (state.status === 'connecting' || state.status === 'connected') preloadCallMediaProvider()
+  }, [state.status])
 
   useEffect(() => {
     if (!userId || !coupleId) {
@@ -189,7 +195,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') { sync(); return }
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') notify('call updates are reconnecting. hang tight.')
+        if ((status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') && stateRef.current.status !== 'idle') notify('call updates are reconnecting. hang tight.')
       })
 
     return () => {
@@ -287,10 +293,13 @@ export function CallProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       setState({ status: 'idle' })
       notify(asMessage(error))
+      if ((error instanceof Error ? error.message : String(error)).includes('call_already_exists')) {
+        void reconcileActiveCall().catch(() => undefined)
+      }
     } finally {
       actionInFlightRef.current = false
     }
-  }, [couple, notify, user])
+  }, [couple, notify, reconcileActiveCall, user])
 
   const acceptCall = useCallback(async () => {
     const current = stateRef.current
@@ -306,12 +315,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
       setState({ status: 'connecting', call: acceptedCall, attempt: 0 })
     } catch (error) {
-      setState({ status: 'idle' })
-      notify(asMessage(error))
+      if (isCallTransitionRace(error)) void reconcileActiveCall().catch(() => notify(asMessage(error)))
+      else {
+        setState({ status: 'idle' })
+        notify(asMessage(error))
+      }
     } finally {
       actionInFlightRef.current = false
     }
-  }, [notify, user?.id])
+  }, [notify, reconcileActiveCall, user?.id])
 
   const declineCall = useCallback(async () => {
     const current = stateRef.current
@@ -321,11 +333,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
       await updateCallStatus(current.call.id, 'declined')
       setState({ status: 'idle' })
     } catch (error) {
-      notify(asMessage(error))
+      if (isCallTransitionRace(error)) void reconcileActiveCall().catch(() => notify(asMessage(error)))
+      else notify(asMessage(error))
     } finally {
       actionInFlightRef.current = false
     }
-  }, [notify])
+  }, [notify, reconcileActiveCall])
 
   const cancelCall = useCallback(async () => {
     const current = stateRef.current
@@ -335,11 +348,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
       await updateCallStatus(current.call.id, 'cancelled')
       setState({ status: 'idle' })
     } catch (error) {
-      notify(asMessage(error))
+      if (isCallTransitionRace(error)) void reconcileActiveCall().catch(() => notify(asMessage(error)))
+      else notify(asMessage(error))
     } finally {
       actionInFlightRef.current = false
     }
-  }, [notify])
+  }, [notify, reconcileActiveCall])
 
   const endCall = useCallback(async () => {
     const current = stateRef.current
@@ -349,11 +363,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
       await updateCallStatus(current.call.id, 'ended')
       setState({ status: 'idle' })
     } catch (error) {
-      notify(asMessage(error))
+      if (isCallTransitionRace(error)) void reconcileActiveCall().catch(() => notify(asMessage(error)))
+      else notify(asMessage(error))
     } finally {
       actionInFlightRef.current = false
     }
-  }, [notify])
+  }, [notify, reconcileActiveCall])
 
   const retryConnection = useCallback(() => {
     const current = stateRef.current
